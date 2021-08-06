@@ -25,12 +25,21 @@ class BadSignatureError(JoseError):
         self.result = result
 
 
-class InvalidHeaderParameterName(JoseError):
+class InvalidHeaderParameterNameError(JoseError):
     error = 'invalid_header_parameter_name'
 
     def __init__(self, name):
         description = 'Invalid Header Parameter Names: {}'.format(name)
-        super(InvalidHeaderParameterName, self).__init__(
+        super(InvalidHeaderParameterNameError, self).__init__(
+            description=description)
+
+
+class InappropriateEncryptionAlgorithmError(JoseError):
+    error = 'inappropriate_encryption_algorithm'
+
+    def __init__(self, enc, alg):
+        description = '{} encryption algorithm is inappropriate for {} algorithm'.format(enc, alg)
+        super(InappropriateEncryptionAlgorithmError, self).__init__(
             description=description)
 
 

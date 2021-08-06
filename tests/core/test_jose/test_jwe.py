@@ -166,16 +166,16 @@ class JWETest(unittest.TestCase):
             protected, b'hello', b'invalid-key'
         )
 
-    def test_ecdh_key_agreement_computation(self):
+    def test_ecdh_es_key_agreement_computation(self):
         # https://tools.ietf.org/html/rfc7518#appendix-C
-        alice_key = {
+        alice_ephemeral_key = {
             "kty": "EC",
             "crv": "P-256",
             "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
             "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps",
             "d": "0_NxaRPUMQoAJt50Gz8YiTr8gRTwyEaCumd-MToTmIo"
         }
-        bob_key = {
+        bob_static_key = {
             "kty": "EC",
             "crv": "P-256",
             "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
@@ -186,23 +186,31 @@ class JWETest(unittest.TestCase):
             "alg": "ECDH-ES",
             "enc": "A128GCM",
             "apu": "QWxpY2U",
-            "apv": "Qm9i",
+            "apv": "Qm9i"
         }
+
         alg = JsonWebEncryption.ALG_REGISTRY['ECDH-ES']
-        key = alg.prepare_key(alice_key)
-        bob_key = alg.prepare_key(bob_key)
-        public_key = bob_key.get_op_key('wrapKey')
-        dk = alg.deliver(key, public_key, headers, 128)
-        self.assertEqual(urlsafe_b64encode(dk), b'VqqN6vgjbSBcIijNcacQGg')
+
+        alice_ephemeral_key = alg.prepare_key(alice_ephemeral_key)
+        bob_static_key = alg.prepare_key(bob_static_key)
+
+        alice_ephemeral_pubkey = alice_ephemeral_key.get_op_key('wrapKey')
+        bob_static_pubkey = bob_static_key.get_op_key('wrapKey')
+
+        dk_at_alice = alg.deliver(alice_ephemeral_key, bob_static_pubkey, headers, 128)
+        self.assertEqual(urlsafe_b64encode(dk_at_alice), b'VqqN6vgjbSBcIijNcacQGg')
+
+        dk_at_bob = alg.deliver(bob_static_key, alice_ephemeral_pubkey, headers, 128)
+        self.assertEqual(urlsafe_b64encode(dk_at_bob), b'VqqN6vgjbSBcIijNcacQGg')
 
     def test_ecdh_es_jwe(self):
         jwe = JsonWebEncryption()
         key = {
             "kty": "EC",
             "crv": "P-256",
-            "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
-            "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps",
-            "d": "0_NxaRPUMQoAJt50Gz8YiTr8gRTwyEaCumd-MToTmIo"
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
         }
         for alg in ["ECDH-ES", "ECDH-ES+A128KW", "ECDH-ES+A192KW", "ECDH-ES+A256KW"]:
             protected = {'alg': alg, 'enc': 'A128GCM'}
@@ -210,7 +218,7 @@ class JWETest(unittest.TestCase):
             rv = jwe.deserialize_compact(data, key)
             self.assertEqual(rv['payload'], b'hello')
 
-    def test_ecdh_es_with_okp(self):
+    def test_ecdh_es_jwe_with_okp(self):
         jwe = JsonWebEncryption()
         key = OKPKey.generate_key('X25519', is_private=True)
         for alg in ["ECDH-ES", "ECDH-ES+A128KW", "ECDH-ES+A192KW", "ECDH-ES+A256KW"]:
@@ -219,23 +227,179 @@ class JWETest(unittest.TestCase):
             rv = jwe.deserialize_compact(data, key)
             self.assertEqual(rv['payload'], b'hello')
 
-    def test_ecdh_es_raise(self):
+    def test_ecdh_es_decryption_with_public_key_fails(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'ECDH-ES', 'enc': 'A128GCM'}
+
         key = {
             "kty": "EC",
             "crv": "P-256",
-            "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
-            "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck"
         }
         data = jwe.serialize_compact(protected, b'hello', key)
-        self.assertRaises(ValueError, jwe.deserialize_compact, data, key)
+        self.assertRaises(
+            ValueError,
+            jwe.deserialize_compact,
+            data, key
+        )
+
+    def test_ecdh_es_encryption_fails_if_key_curve_inappropriate(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-ES', 'enc': 'A128GCM'}
 
         key = OKPKey.generate_key('Ed25519', is_private=True)
         self.assertRaises(
             ValueError,
             jwe.serialize_compact,
             protected, b'hello', key
+        )
+
+    def test_ecdh_1pu_key_agreement_computation(self):
+        # https://datatracker.ietf.org/doc/html/draft-madden-jose-ecdh-1pu-04#appendix-A
+        alice_static_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            "d": "Hndv7ZZjs_ke8o9zXYo3iq-Yr8SewI5vrqd0pAvEPqg"
+        }
+        bob_static_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
+        }
+        alice_ephemeral_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
+            "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps",
+            "d": "0_NxaRPUMQoAJt50Gz8YiTr8gRTwyEaCumd-MToTmIo"
+        }
+        headers = {
+            "alg": "ECDH-1PU",
+            "enc": "A256GCM",
+            "apu": "QWxpY2U",
+            "apv": "Qm9i"
+        }
+
+        alg = JsonWebEncryption.ALG_REGISTRY['ECDH-1PU']
+
+        alice_static_key = alg.prepare_key(alice_static_key)
+        bob_static_key = alg.prepare_key(bob_static_key)
+        alice_ephemeral_key = alg.prepare_key(alice_ephemeral_key)
+
+        alice_static_pubkey = alice_static_key.get_op_key('wrapKey')
+        bob_static_pubkey = bob_static_key.get_op_key('wrapKey')
+        alice_ephemeral_pubkey = alice_ephemeral_key.get_op_key('wrapKey')
+
+        dk_at_alice = alg.deliver_at_sender(alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, 256, None)
+        self.assertEqual(urlsafe_b64encode(dk_at_alice), b'bK8Tcj0UhQrUtCzW3ek1v_0v_wCpunDeBcIDpeFyLKc')
+
+        dk_at_bob = alg.deliver_at_recipient(bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, 256, None)
+        self.assertEqual(urlsafe_b64encode(dk_at_bob), b'bK8Tcj0UhQrUtCzW3ek1v_0v_wCpunDeBcIDpeFyLKc')
+
+    def test_ecdh_1pu_jwe(self):
+        jwe = JsonWebEncryption()
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            "d": "Hndv7ZZjs_ke8o9zXYo3iq-Yr8SewI5vrqd0pAvEPqg"
+        }
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
+        }
+        for alg, enc in [
+            ('ECDH-1PU', 'A256GCM'),
+            ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
+            ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
+            ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
+        ]:
+            protected = {'alg': alg, 'enc': enc}
+            data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
+            rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
+            self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_1pu_jwe_with_okp(self):
+        jwe = JsonWebEncryption()
+        alice_key = OKPKey.generate_key('X25519', is_private=True)
+        bob_key = OKPKey.generate_key('X25519', is_private=True)
+        for alg, enc in [
+            ('ECDH-1PU', 'A256GCM'),
+            ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
+            ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
+            ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
+        ]:
+            protected = {'alg': alg, 'enc': enc}
+            data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
+            rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
+            self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_1pu_encryption_with_public_sender_key_fails(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE"
+        }
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
+        }
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact, protected,
+            b'hello', bob_key, sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_decryption_with_public_recipient_key_fails(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            "d": "Hndv7ZZjs_ke8o9zXYo3iq-Yr8SewI5vrqd0pAvEPqg"
+        }
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck"
+        }
+        data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
+        self.assertRaises(
+            ValueError,
+            jwe.deserialize_compact,
+            data, bob_key, sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_fails_if_keys_curve_inappropriate(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = OKPKey.generate_key('Ed25519', is_private=True)
+        bob_key = OKPKey.generate_key('Ed25519', is_private=True)
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
         )
 
     def test_dir_alg(self):
