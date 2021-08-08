@@ -92,8 +92,7 @@ class JsonWebEncryption(object):
             prep = alg.generate_keys_and_prepare_headers(enc, key, sender_key)
             epk = prep['epk']
             cek = prep['cek']
-            if 'header' in prep:
-                protected.update(prep['header'])
+            protected.update(prep['header'])
         else:
             # In any other case:
             # Keep the normal steps order defined by RFC 7516
