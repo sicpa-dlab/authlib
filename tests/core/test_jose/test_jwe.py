@@ -2,10 +2,11 @@ import os
 import unittest
 from collections import OrderedDict
 
-from authlib.jose import errors
+from authlib.jose import errors, ECKey
 from authlib.jose import OctKey, OKPKey
 from authlib.jose import JsonWebEncryption
 from authlib.common.encoding import urlsafe_b64encode, json_b64encode, to_bytes
+from authlib.jose.errors import InappropriateEncryptionAlgorithmError
 from tests.util import read_file_path
 
 
@@ -254,11 +255,11 @@ class JWETest(unittest.TestCase):
             data, key
         )
 
-    def test_ecdh_es_encryption_fails_if_key_curve_inappropriate(self):
+    def test_ecdh_es_encryption_fails_if_key_curve_is_inappropriate(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'ECDH-ES', 'enc': 'A128GCM'}
 
-        key = OKPKey.generate_key('Ed25519', is_private=True)
+        key = OKPKey.generate_key('Ed25519', is_private=False)
         self.assertRaises(
             ValueError,
             jwe.serialize_compact,
@@ -474,6 +475,33 @@ class JWETest(unittest.TestCase):
             rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
             self.assertEqual(rv['payload'], b'hello')
 
+    def test_ecdh_1pu_encryption_fails_if_not_aes_cbc_enc_is_used_with_kw(self):
+        jwe = JsonWebEncryption()
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            "d": "Hndv7ZZjs_ke8o9zXYo3iq-Yr8SewI5vrqd0pAvEPqg"
+        }
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck"
+        }
+        for alg, enc in [
+            ('ECDH-1PU+A128KW', 'A256GCM'),
+            ('ECDH-1PU+A192KW', 'A256GCM'),
+            ('ECDH-1PU+A256KW', 'A256GCM'),
+        ]:
+            protected = {'alg': alg, 'enc': enc}
+            self.assertRaises(
+                InappropriateEncryptionAlgorithmError,
+                jwe.serialize_compact,
+                protected, b'hello', bob_key, sender_key=alice_key
+            )
+
     def test_ecdh_1pu_encryption_with_public_sender_key_fails(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
@@ -493,8 +521,8 @@ class JWETest(unittest.TestCase):
         }
         self.assertRaises(
             ValueError,
-            jwe.serialize_compact, protected,
-            b'hello', bob_key, sender_key=alice_key
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
         )
 
     def test_ecdh_1pu_decryption_with_public_recipient_key_fails(self):
@@ -521,12 +549,104 @@ class JWETest(unittest.TestCase):
             data, bob_key, sender_key=alice_key
         )
 
-    def test_ecdh_1pu_encryption_fails_if_keys_curve_inappropriate(self):
+    def test_ecdh_1pu_encryption_fails_if_key_types_are_different(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
 
-        alice_key = OKPKey.generate_key('Ed25519', is_private=True)
-        bob_key = OKPKey.generate_key('Ed25519', is_private=True)
+        alice_key = ECKey.generate_key('P-256', is_private=True)
+        bob_key = OKPKey.generate_key('X25519', is_private=False)
+        self.assertRaises(
+            Exception,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+        alice_key = OKPKey.generate_key('X25519', is_private=True)
+        bob_key = ECKey.generate_key('P-256', is_private=False)
+        self.assertRaises(
+            Exception,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_fails_if_keys_curves_are_different(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = ECKey.generate_key('P-256', is_private=True)
+        bob_key = ECKey.generate_key('secp256k1', is_private=False)
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+        alice_key = ECKey.generate_key('P-384', is_private=True)
+        bob_key = ECKey.generate_key('P-521', is_private=False)
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+        alice_key = OKPKey.generate_key('X25519', is_private=True)
+        bob_key = OKPKey.generate_key('X448', is_private=False)
+        self.assertRaises(
+            TypeError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_fails_if_key_points_are_not_actually_on_same_curve(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "aDHtGkIYyhR5geqfMaFL0T9cG4JEMI8nyMFJA7gRUDs",
+            "y": "AjGN5_f-aCt4vYg74my6n1ALIq746nlc_httIgcBSYY",
+            "d": "Sim3EIzXsWaWu9QW8yKVHwxBM5CTlnrVU_Eq-y_KRQA"
+        }  # the point is indeed on P-256 curve
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "5ZFnZbs_BtLBIZxwt5hS7SBDtI2a-dJ871dJ8ZnxZ6c",
+            "y": "K0srqSkbo1Yeckr0YoQA8r_rOz0ZUStiv3mc1qn46pg"
+        }  # the point is not on P-256 curve but is actually on secp256k1 curve
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-521",
+            "x": "1JDMOjnMgASo01PVHRcyCDtE6CLgKuwXLXLbdLGxpdubLuHYBa0KAepyimnxCWsX",
+            "y": "w7BSC8Xb3XgMMfE7IFCJpoOmx1Sf3T3_3OZ4CrF6_iCFAw4VOdFYR42OnbKMFG--",
+            "d": "lCkpFBaVwHzfHtkJEV3PzxefObOPnMgUjNZSLryqC5AkERgXT3-DZLEi6eBzq5gk"
+        }  # the point is not on P-521 curve but is actually on P-384 curve
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-521",
+            "x": "Cd6rinJdgS4WJj6iaNyXiVhpMbhZLmPykmrnFhIad04B3ulf5pURb5v9mx21c_Cv8Q1RBOptwleLg5Qjq2J1qa4",
+            "y": "hXo9p1EjW6W4opAQdmfNgyxztkNxYwn9L4FVTLX51KNEsW0aqueLm96adRmf0HoGIbNhIdcIlXOKlRUHqgunDkM"
+        }  # the point is indeed on P-521 curve
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_fails_if_keys_curve_is_inappropriate(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
+
+        alice_key = OKPKey.generate_key('Ed25519', is_private=True)  # use Ed25519 instead of X25519
+        bob_key = OKPKey.generate_key('Ed25519', is_private=False)  # use Ed25519 instead of X25519
         self.assertRaises(
             ValueError,
             jwe.serialize_compact,
