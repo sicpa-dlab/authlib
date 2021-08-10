@@ -47,8 +47,9 @@ class OKPKey(AsymmetricKey):
 
     def exchange_shared_key(self, pubkey):
         # used in ECDHESAlgorithm
-        if self.private_key and isinstance(self.private_key, (X25519PrivateKey, X448PrivateKey)):
-            return self.private_key.exchange(pubkey)
+        private_key = self.get_private_key()
+        if private_key and isinstance(private_key, (X25519PrivateKey, X448PrivateKey)):
+            return private_key.exchange(pubkey)
         raise ValueError('Invalid key for exchanging shared key')
 
     @staticmethod

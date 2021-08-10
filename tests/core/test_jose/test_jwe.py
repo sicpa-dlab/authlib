@@ -641,6 +641,42 @@ class JWETest(unittest.TestCase):
             protected, b'hello', bob_key, sender_key=alice_key
         )
 
+        alice_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "TAB1oIsjPob3guKwTEeQsAsupSRPdXdxHhnV8JrVJTA",
+            "d": "kO2LzPr4vLg_Hn-7_MDq66hJZgvTIkzDG4p6nCsgNHk"
+        })  # the point is indeed on X25519 curve
+        bob_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "lVHcPx4R9bExaoxXZY9tAq7SNW9pJKCoVQxURLtkAs3Dg5ZRxcjhf0JUyg2lod5OGDptJ7wowwY"
+        })  # the point is not on X25519 curve but is actually on X448 curve
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
+        alice_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X448",
+            "x": "TAB1oIsjPob3guKwTEeQsAsupSRPdXdxHhnV8JrVJTA",
+            "d": "kO2LzPr4vLg_Hn-7_MDq66hJZgvTIkzDG4p6nCsgNHk"
+        })  # the point is not on X448 curve but is actually on X25519 curve
+        bob_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X448",
+            "x": "lVHcPx4R9bExaoxXZY9tAq7SNW9pJKCoVQxURLtkAs3Dg5ZRxcjhf0JUyg2lod5OGDptJ7wowwY"
+        })  # the point is indeed on X448 curve
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_compact,
+            protected, b'hello', bob_key, sender_key=alice_key
+        )
+
     def test_ecdh_1pu_encryption_fails_if_keys_curve_is_inappropriate(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'ECDH-1PU', 'enc': 'A256GCM'}
