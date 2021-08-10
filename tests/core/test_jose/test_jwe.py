@@ -135,7 +135,7 @@ class JWETest(unittest.TestCase):
                 rv = jwe.deserialize_compact(data, key)
                 self.assertEqual(rv['payload'], b'hello')
 
-    def test_ase_jwe_invalid_key(self):
+    def test_aes_jwe_invalid_key(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'A128KW', 'enc': 'A128GCM'}
         self.assertRaises(
@@ -160,7 +160,7 @@ class JWETest(unittest.TestCase):
                 rv = jwe.deserialize_compact(data, key)
                 self.assertEqual(rv['payload'], b'hello')
 
-    def test_ase_gcm_jwe_invalid_key(self):
+    def test_aes_gcm_jwe_invalid_key(self):
         jwe = JsonWebEncryption()
         protected = {'alg': 'A128GCMKW', 'enc': 'A128GCM'}
         self.assertRaises(
@@ -214,7 +214,7 @@ class JWETest(unittest.TestCase):
         dk_at_bob = alg.deliver(bob_static_key, alice_ephemeral_pubkey, headers, 128)
         self.assertEqual(dk_at_bob, dk_at_alice)
 
-    def test_ecdh_es_jwe(self):
+    def test_ecdh_es_jwe_in_direct_key_agreement_mode(self):
         jwe = JsonWebEncryption()
         key = {
             "kty": "EC",
@@ -223,20 +223,86 @@ class JWETest(unittest.TestCase):
             "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
             "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
         }
-        for alg in ["ECDH-ES", "ECDH-ES+A128KW", "ECDH-ES+A192KW", "ECDH-ES+A256KW"]:
-            protected = {'alg': alg, 'enc': 'A128GCM'}
+
+        for enc in [
+            'A128CBC-HS256',
+            'A192CBC-HS384',
+            'A256CBC-HS512',
+            'A128GCM',
+            'A192GCM',
+            'A256GCM',
+        ]:
+            protected = {'alg': 'ECDH-ES', 'enc': enc}
             data = jwe.serialize_compact(protected, b'hello', key)
             rv = jwe.deserialize_compact(data, key)
             self.assertEqual(rv['payload'], b'hello')
 
-    def test_ecdh_es_jwe_with_okp(self):
+    def test_ecdh_es_jwe_in_key_agreement_with_key_wrapping_mode(self):
+        jwe = JsonWebEncryption()
+        key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
+        }
+
+        for alg in [
+            'ECDH-ES+A128KW',
+            'ECDH-ES+A192KW',
+            'ECDH-ES+A256KW',
+        ]:
+            for enc in [
+                'A128CBC-HS256',
+                'A192CBC-HS384',
+                'A256CBC-HS512',
+                'A128GCM',
+                'A192GCM',
+                'A256GCM',
+            ]:
+                protected = {'alg': alg, 'enc': enc}
+                data = jwe.serialize_compact(protected, b'hello', key)
+                rv = jwe.deserialize_compact(data, key)
+                self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_es_jwe_with_okp_key_in_direct_key_agreement_mode(self):
         jwe = JsonWebEncryption()
         key = OKPKey.generate_key('X25519', is_private=True)
-        for alg in ["ECDH-ES", "ECDH-ES+A128KW", "ECDH-ES+A192KW", "ECDH-ES+A256KW"]:
-            protected = {'alg': alg, 'enc': 'A128GCM'}
+
+        for enc in [
+            'A128CBC-HS256',
+            'A192CBC-HS384',
+            'A256CBC-HS512',
+            'A128GCM',
+            'A192GCM',
+            'A256GCM',
+        ]:
+            protected = {'alg': 'ECDH-ES', 'enc': enc}
             data = jwe.serialize_compact(protected, b'hello', key)
             rv = jwe.deserialize_compact(data, key)
             self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_es_jwe_with_okp_key_in_key_agreement_with_key_wrapping_mode(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        for alg in [
+            'ECDH-ES+A128KW',
+            'ECDH-ES+A192KW',
+            'ECDH-ES+A256KW',
+        ]:
+            for enc in [
+                'A128CBC-HS256',
+                'A192CBC-HS384',
+                'A256CBC-HS512',
+                'A128GCM',
+                'A192GCM',
+                'A256GCM',
+            ]:
+                protected = {'alg': alg, 'enc': enc}
+                data = jwe.serialize_compact(protected, b'hello', key)
+                rv = jwe.deserialize_compact(data, key)
+                self.assertEqual(rv['payload'], b'hello')
 
     def test_ecdh_es_decryption_with_public_key_fails(self):
         jwe = JsonWebEncryption()
@@ -433,7 +499,7 @@ class JWETest(unittest.TestCase):
         payload_decrypted_by_charlie = enc.decrypt(ciphertext, aad, iv, tag, cek_unwrapped_by_charlie)
         self.assertEqual(payload_decrypted_by_charlie, payload)
 
-    def test_ecdh_1pu_jwe(self):
+    def test_ecdh_1pu_jwe_in_direct_key_agreement_mode(self):
         jwe = JsonWebEncryption()
         alice_key = {
             "kty": "EC",
@@ -449,33 +515,91 @@ class JWETest(unittest.TestCase):
             "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
             "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
         }
-        for alg, enc in [
-            ('ECDH-1PU', 'A256CBC-HS512'),
-            ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
-            ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
-            ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
+
+        for enc in [
+            'A128CBC-HS256',
+            'A192CBC-HS384',
+            'A256CBC-HS512',
+            'A128GCM',
+            'A192GCM',
+            'A256GCM',
         ]:
-            protected = {'alg': alg, 'enc': enc}
+            protected = {'alg': 'ECDH-1PU', 'enc': enc}
             data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
             rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
             self.assertEqual(rv['payload'], b'hello')
 
-    def test_ecdh_1pu_jwe_with_okp(self):
+    def test_ecdh_1pu_jwe_in_key_agreement_with_key_wrapping_mode(self):
+        jwe = JsonWebEncryption()
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis",
+            "y": "y77t-RvAHRKTsSGdIYUfweuOvwrvDD-Q3Hv5J0fSKbE",
+            "d": "Hndv7ZZjs_ke8o9zXYo3iq-Yr8SewI5vrqd0pAvEPqg"
+        }
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
+            "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck",
+            "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
+        }
+
+        for alg in [
+            'ECDH-1PU+A128KW',
+            'ECDH-1PU+A192KW',
+            'ECDH-1PU+A256KW',
+        ]:
+            for enc in [
+                'A128CBC-HS256',
+                'A192CBC-HS384',
+                'A256CBC-HS512',
+            ]:
+                protected = {'alg': alg, 'enc': enc}
+                data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
+                rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
+                self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_1pu_jwe_with_okp_keys_in_direct_key_agreement_mode(self):
         jwe = JsonWebEncryption()
         alice_key = OKPKey.generate_key('X25519', is_private=True)
         bob_key = OKPKey.generate_key('X25519', is_private=True)
-        for alg, enc in [
-            ('ECDH-1PU', 'A256CBC-HS512'),
-            ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
-            ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
-            ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
+
+        for enc in [
+            'A128CBC-HS256',
+            'A192CBC-HS384',
+            'A256CBC-HS512',
+            'A128GCM',
+            'A192GCM',
+            'A256GCM',
         ]:
-            protected = {'alg': alg, 'enc': enc}
+            protected = {'alg': 'ECDH-1PU', 'enc': enc}
             data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
             rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
             self.assertEqual(rv['payload'], b'hello')
 
-    def test_ecdh_1pu_encryption_fails_if_not_aes_cbc_enc_is_used_with_kw(self):
+    def test_ecdh_1pu_jwe_with_okp_keys_in_key_agreement_with_key_wrapping_mode(self):
+        jwe = JsonWebEncryption()
+        alice_key = OKPKey.generate_key('X25519', is_private=True)
+        bob_key = OKPKey.generate_key('X25519', is_private=True)
+
+        for alg in [
+            'ECDH-1PU+A128KW',
+            'ECDH-1PU+A192KW',
+            'ECDH-1PU+A256KW',
+        ]:
+            for enc in [
+                'A128CBC-HS256',
+                'A192CBC-HS384',
+                'A256CBC-HS512',
+            ]:
+                protected = {'alg': alg, 'enc': enc}
+                data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
+                rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
+                self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_1pu_encryption_fails_if_not_aes_cbc_hmac_sha2_enc_is_used_with_kw(self):
         jwe = JsonWebEncryption()
         alice_key = {
             "kty": "EC",
@@ -490,17 +614,23 @@ class JWETest(unittest.TestCase):
             "x": "weNJy2HscCSM6AEDTDg04biOvhFhyyWvOHQfeF_PxMQ",
             "y": "e8lnCO-AlStT-NJVX-crhB7QRYhiix03illJOVAOyck"
         }
-        for alg, enc in [
-            ('ECDH-1PU+A128KW', 'A256GCM'),
-            ('ECDH-1PU+A192KW', 'A256GCM'),
-            ('ECDH-1PU+A256KW', 'A256GCM'),
+
+        for alg in [
+            'ECDH-1PU+A128KW',
+            'ECDH-1PU+A192KW',
+            'ECDH-1PU+A256KW',
         ]:
-            protected = {'alg': alg, 'enc': enc}
-            self.assertRaises(
-                InappropriateEncryptionAlgorithmError,
-                jwe.serialize_compact,
-                protected, b'hello', bob_key, sender_key=alice_key
-            )
+            for enc in [
+                'A128GCM',
+                'A192GCM',
+                'A256GCM',
+            ]:
+                protected = {'alg': alg, 'enc': enc}
+                self.assertRaises(
+                    InappropriateEncryptionAlgorithmError,
+                    jwe.serialize_compact,
+                    protected, b'hello', bob_key, sender_key=alice_key
+                )
 
     def test_ecdh_1pu_encryption_with_public_sender_key_fails(self):
         jwe = JsonWebEncryption()
