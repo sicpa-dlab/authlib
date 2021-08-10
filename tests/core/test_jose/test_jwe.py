@@ -450,7 +450,7 @@ class JWETest(unittest.TestCase):
             "d": "VEmDZpDXXK8p8N0Cndsxs924q6nS1RXFASRl6BfUqdw"
         }
         for alg, enc in [
-            ('ECDH-1PU', 'A256GCM'),
+            ('ECDH-1PU', 'A256CBC-HS512'),
             ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
             ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
             ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
@@ -465,7 +465,7 @@ class JWETest(unittest.TestCase):
         alice_key = OKPKey.generate_key('X25519', is_private=True)
         bob_key = OKPKey.generate_key('X25519', is_private=True)
         for alg, enc in [
-            ('ECDH-1PU', 'A256GCM'),
+            ('ECDH-1PU', 'A256CBC-HS512'),
             ('ECDH-1PU+A128KW', 'A256CBC-HS512'),
             ('ECDH-1PU+A192KW', 'A256CBC-HS512'),
             ('ECDH-1PU+A256KW', 'A256CBC-HS512'),
