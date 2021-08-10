@@ -109,7 +109,7 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
 
     def agree_upon_key_at_sender(self, enc_alg, headers, key, sender_key, epk, tag=None):
         if self.key_size is None:
-            bit_size = enc_alg.key_size
+            bit_size = enc_alg.CEK_SIZE
         else:
             bit_size = self.key_size
 
@@ -146,7 +146,7 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
             raise ValueError('"kid" of sender\'s key is not equal to "skid"');
 
         if self.key_size is None:
-            bit_size = enc_alg.key_size
+            bit_size = enc_alg.CEK_SIZE
         else:
             bit_size = self.key_size
 

@@ -67,7 +67,6 @@ class RSAAlgorithm(JWEAlgorithm):
         # it will raise ValueError if failed
         op_key = key.get_op_key('unwrapKey')
         cek = op_key.decrypt(ek, self.padding)
-        print(cek, enc_alg.key_size)
         if len(cek) * 8 != enc_alg.CEK_SIZE:
             raise ValueError('Invalid "cek" length')
         return cek
@@ -220,7 +219,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
 
     def wrap(self, enc_alg, headers, key, sender_key=None):
         if self.key_size is None:
-            bit_size = enc_alg.key_size
+            bit_size = enc_alg.CEK_SIZE
         else:
             bit_size = self.key_size
 
@@ -245,7 +244,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
             raise ValueError('Missing "epk" in headers')
 
         if self.key_size is None:
-            bit_size = enc_alg.key_size
+            bit_size = enc_alg.CEK_SIZE
         else:
             bit_size = self.key_size
 
