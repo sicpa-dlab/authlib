@@ -84,18 +84,10 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
         return key.generate_key(key['crv'], is_private=True)
 
     def prepare_headers(self, sender_key, epk):
-        h = {}
-
-        if sender_key.kid:
-            # TODO: Should we overwrite "skid" if it has already been set?
-            h['skid'] = sender_key.kid
-
         # REQUIRED_JSON_FIELDS contains only public fields
         pub_epk = {k: epk[k] for k in epk.REQUIRED_JSON_FIELDS}
         pub_epk['kty'] = epk.kty
-        h['epk'] = pub_epk
-
-        return h
+        return {'epk': pub_epk}
 
     def generate_keys_and_prepare_headers(self, enc_alg, key, sender_key):
         if not isinstance(enc_alg, CBCHS2EncAlgorithm):
@@ -140,10 +132,6 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
     def unwrap(self, enc_alg, ek, headers, key, sender_key, tag=None):
         if 'epk' not in headers:
             raise ValueError('Missing "epk" in headers')
-
-        # TODO: Should we validate "skid" value correctness?
-        if 'skid' in headers and sender_key.kid and sender_key.kid != headers['skid']:
-            raise ValueError('"kid" of sender\'s key is not equal to "skid"');
 
         if self.key_size is None:
             bit_size = enc_alg.CEK_SIZE
