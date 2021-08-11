@@ -6,7 +6,7 @@ from authlib.jose import errors, ECKey
 from authlib.jose import OctKey, OKPKey
 from authlib.jose import JsonWebEncryption
 from authlib.common.encoding import urlsafe_b64encode, json_b64encode, to_bytes
-from authlib.jose.errors import InappropriateEncryptionAlgorithmError
+from authlib.jose.errors import InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError
 from tests.util import read_file_path
 
 
@@ -627,7 +627,7 @@ class JWETest(unittest.TestCase):
             ]:
                 protected = {'alg': alg, 'enc': enc}
                 self.assertRaises(
-                    InappropriateEncryptionAlgorithmError,
+                    InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError,
                     jwe.serialize_compact,
                     protected, b'hello', bob_key, sender_key=alice_key
                 )

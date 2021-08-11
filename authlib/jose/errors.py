@@ -34,12 +34,13 @@ class InvalidHeaderParameterNameError(JoseError):
             description=description)
 
 
-class InappropriateEncryptionAlgorithmError(JoseError):
-    error = 'inappropriate_encryption_algorithm'
+class InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError(JoseError):
+    error = 'invalid_encryption_algorithm_for_ECDH_1PU_with_key_wrapping'
 
-    def __init__(self, enc, alg):
-        description = '{} encryption algorithm is inappropriate for {} algorithm'.format(enc, alg)
-        super(InappropriateEncryptionAlgorithmError, self).__init__(
+    def __init__(self):
+        description = 'In key agreement with key wrapping mode ECDH-1PU algorithm ' \
+                      'only supports AES_CBC_HMAC_SHA2 family encryption algorithms'
+        super(InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError, self).__init__(
             description=description)
 
 
