@@ -187,7 +187,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
             return raw_data
         return ECKey.import_key(raw_data)
 
-    def _compute_fixed_info(self, headers, bit_size):
+    def compute_fixed_info(self, headers, bit_size):
         # AlgorithmID
         if self.key_size is None:
             alg_id = u32be_len_input(headers['enc'])
@@ -205,10 +205,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
 
         return alg_id + apu_info + apv_info + pub_info
 
-    def deliver(self, key, pubkey, headers, bit_size):
-        shared_key = key.exchange_shared_key(pubkey)
-        fixed_info = self._compute_fixed_info(headers, bit_size)
-
+    def compute_derived_key(self, shared_key, fixed_info, bit_size):
         ckdf = ConcatKDFHash(
             algorithm=hashes.SHA256(),
             length=bit_size // 8,
@@ -216,6 +213,11 @@ class ECDHESAlgorithm(JWEAlgorithm):
             backend=default_backend()
         )
         return ckdf.derive(shared_key)
+
+    def deliver(self, key, pubkey, headers, bit_size):
+        shared_key = key.exchange_shared_key(pubkey)
+        fixed_info = self.compute_fixed_info(headers, bit_size)
+        return self.compute_derived_key(shared_key, fixed_info, bit_size)
 
     def wrap(self, enc_alg, headers, key, sender_key=None):
         if self.key_size is None:

@@ -32,7 +32,10 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
             return raw_data
         return ECKey.import_key(raw_data)
 
-    def _compute_fixed_info(self, headers, bit_size, tag):
+    def compute_shared_key(self, shared_key_e, shared_key_s):
+        return shared_key_e + shared_key_s
+
+    def compute_fixed_info(self, headers, bit_size, tag):
         if tag is None:
             cctag = b''
         else:
@@ -55,9 +58,7 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
 
         return alg_id + apu_info + apv_info + pub_info
 
-    def _deliver(self, shared_key, headers, bit_size, tag):
-        fixed_info = self._compute_fixed_info(headers, bit_size, tag)
-
+    def compute_derived_key(self, shared_key, fixed_info, bit_size):
         ckdf = ConcatKDFHash(
             algorithm=hashes.SHA256(),
             length=bit_size // 8,
@@ -69,16 +70,20 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
     def deliver_at_sender(self, sender_static_key, sender_ephemeral_key, recipient_pubkey, headers, bit_size, tag):
         shared_key_s = sender_static_key.exchange_shared_key(recipient_pubkey)
         shared_key_e = sender_ephemeral_key.exchange_shared_key(recipient_pubkey)
-        shared_key = shared_key_e + shared_key_s
+        shared_key = self.compute_shared_key(shared_key_e, shared_key_s)
 
-        return self._deliver(shared_key, headers, bit_size, tag)
+        fixed_info = self.compute_fixed_info(headers, bit_size, tag)
+
+        return self.compute_derived_key(shared_key, fixed_info, bit_size)
 
     def deliver_at_recipient(self, recipient_key, sender_static_pubkey, sender_ephemeral_pubkey, headers, bit_size, tag):
         shared_key_s = recipient_key.exchange_shared_key(sender_static_pubkey)
         shared_key_e = recipient_key.exchange_shared_key(sender_ephemeral_pubkey)
-        shared_key = shared_key_e + shared_key_s
+        shared_key = self.compute_shared_key(shared_key_e, shared_key_s)
 
-        return self._deliver(shared_key, headers, bit_size, tag)
+        fixed_info = self.compute_fixed_info(headers, bit_size, tag)
+
+        return self.compute_derived_key(shared_key, fixed_info, bit_size)
 
     def _generate_ephemeral_key(self, key):
         return key.generate_key(key['crv'], is_private=True)

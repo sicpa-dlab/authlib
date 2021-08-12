@@ -201,6 +201,7 @@ class JWETest(unittest.TestCase):
         }
 
         alg = JsonWebEncryption.ALG_REGISTRY['ECDH-ES']
+        enc = JsonWebEncryption.ENC_REGISTRY['A128GCM']
 
         alice_ephemeral_key = alg.prepare_key(alice_ephemeral_key)
         bob_static_key = alg.prepare_key(bob_static_key)
@@ -208,10 +209,46 @@ class JWETest(unittest.TestCase):
         alice_ephemeral_pubkey = alice_ephemeral_key.get_op_key('wrapKey')
         bob_static_pubkey = bob_static_key.get_op_key('wrapKey')
 
-        dk_at_alice = alg.deliver(alice_ephemeral_key, bob_static_pubkey, headers, 128)
+        # Derived key computation at Alice
+
+        # Step-by-step methods verification
+        _shared_key_at_alice = alice_ephemeral_key.exchange_shared_key(bob_static_pubkey)
+        self.assertEqual(
+            _shared_key_at_alice,
+            bytes([158, 86, 217, 29, 129, 113, 53, 211, 114, 131, 66, 131, 191, 132, 38, 156,
+                   251, 49, 110, 163, 218, 128, 106, 72, 246, 218, 167, 121, 140, 254, 144, 196])
+        )
+
+        _fixed_info_at_alice = alg.compute_fixed_info(headers, enc.key_size)
+        self.assertEqual(
+            _fixed_info_at_alice,
+            bytes([0, 0, 0, 7, 65, 49, 50, 56, 71, 67, 77, 0, 0, 0, 5, 65,
+                   108, 105, 99, 101, 0, 0, 0, 3, 66, 111, 98, 0, 0, 0, 128])
+        )
+
+        _dk_at_alice = alg.compute_derived_key(_shared_key_at_alice, _fixed_info_at_alice, enc.key_size)
+        self.assertEqual(_dk_at_alice, bytes([86, 170, 141, 234, 248, 35, 109, 32, 92, 34, 40, 205, 113, 167, 16, 26]))
+        self.assertEqual(urlsafe_b64encode(_dk_at_alice), b'VqqN6vgjbSBcIijNcacQGg')
+
+        # All-in-one method verification
+        dk_at_alice = alg.deliver(alice_ephemeral_key, bob_static_pubkey, headers, enc.key_size)
+        self.assertEqual(dk_at_alice, bytes([86, 170, 141, 234, 248, 35, 109, 32, 92, 34, 40, 205, 113, 167, 16, 26]))
         self.assertEqual(urlsafe_b64encode(dk_at_alice), b'VqqN6vgjbSBcIijNcacQGg')
 
-        dk_at_bob = alg.deliver(bob_static_key, alice_ephemeral_pubkey, headers, 128)
+        # Derived key computation at Bob
+
+        # Step-by-step methods verification
+        _shared_key_at_bob = bob_static_key.exchange_shared_key(alice_ephemeral_pubkey)
+        self.assertEqual(_shared_key_at_bob, _shared_key_at_alice)
+
+        _fixed_info_at_bob = alg.compute_fixed_info(headers, enc.key_size)
+        self.assertEqual(_fixed_info_at_bob, _fixed_info_at_alice)
+
+        _dk_at_bob = alg.compute_derived_key(_shared_key_at_bob, _fixed_info_at_bob, enc.key_size)
+        self.assertEqual(_dk_at_bob, _dk_at_alice)
+
+        # All-in-one method verification
+        dk_at_bob = alg.deliver(bob_static_key, alice_ephemeral_pubkey, headers, enc.key_size)
         self.assertEqual(dk_at_bob, dk_at_alice)
 
     def test_ecdh_es_jwe_in_direct_key_agreement_mode(self):
@@ -370,6 +407,7 @@ class JWETest(unittest.TestCase):
         }
 
         alg = JsonWebEncryption.ALG_REGISTRY['ECDH-1PU']
+        enc = JsonWebEncryption.ENC_REGISTRY['A256GCM']
 
         alice_static_key = alg.prepare_key(alice_static_key)
         bob_static_key = alg.prepare_key(bob_static_key)
@@ -379,12 +417,73 @@ class JWETest(unittest.TestCase):
         bob_static_pubkey = bob_static_key.get_op_key('wrapKey')
         alice_ephemeral_pubkey = alice_ephemeral_key.get_op_key('wrapKey')
 
+        # Derived key computation at Alice
+
+        # Step-by-step methods verification
+        _shared_key_e_at_alice = alice_ephemeral_key.exchange_shared_key(bob_static_pubkey)
+        self.assertEqual(
+            _shared_key_e_at_alice,
+            b'\x9e\x56\xd9\x1d\x81\x71\x35\xd3\x72\x83\x42\x83\xbf\x84\x26\x9c' \
+            b'\xfb\x31\x6e\xa3\xda\x80\x6a\x48\xf6\xda\xa7\x79\x8c\xfe\x90\xc4'
+        )
+
+        _shared_key_s_at_alice = alice_static_key.exchange_shared_key(bob_static_pubkey)
+        self.assertEqual(
+            _shared_key_s_at_alice,
+            b'\xe3\xca\x34\x74\x38\x4c\x9f\x62\xb3\x0b\xfd\x4c\x68\x8b\x3e\x7d' \
+            b'\x41\x10\xa1\xb4\xba\xdc\x3c\xc5\x4e\xf7\xb8\x12\x41\xef\xd5\x0d'
+        )
+
+        _shared_key_at_alice = alg.compute_shared_key(_shared_key_e_at_alice, _shared_key_s_at_alice)
+        self.assertEqual(
+            _shared_key_at_alice,
+            b'\x9e\x56\xd9\x1d\x81\x71\x35\xd3\x72\x83\x42\x83\xbf\x84\x26\x9c' \
+            b'\xfb\x31\x6e\xa3\xda\x80\x6a\x48\xf6\xda\xa7\x79\x8c\xfe\x90\xc4' \
+            b'\xe3\xca\x34\x74\x38\x4c\x9f\x62\xb3\x0b\xfd\x4c\x68\x8b\x3e\x7d' \
+            b'\x41\x10\xa1\xb4\xba\xdc\x3c\xc5\x4e\xf7\xb8\x12\x41\xef\xd5\x0d'
+        )
+
+        _fixed_info_at_alice = alg.compute_fixed_info(headers, enc.key_size, None)
+        self.assertEqual(
+            _fixed_info_at_alice,
+            b'\x00\x00\x00\x07\x41\x32\x35\x36\x47\x43\x4d\x00\x00\x00\x05\x41' \
+            b'\x6c\x69\x63\x65\x00\x00\x00\x03\x42\x6f\x62\x00\x00\x01\x00'
+        )
+
+        _dk_at_alice = alg.compute_derived_key(_shared_key_at_alice, _fixed_info_at_alice, enc.key_size)
+        self.assertEqual(
+            _dk_at_alice,
+            b'\x6c\xaf\x13\x72\x3d\x14\x85\x0a\xd4\xb4\x2c\xd6\xdd\xe9\x35\xbf' \
+            b'\xfd\x2f\xff\x00\xa9\xba\x70\xde\x05\xc2\x03\xa5\xe1\x72\x2c\xa7'
+        )
+        self.assertEqual(urlsafe_b64encode(_dk_at_alice), b'bK8Tcj0UhQrUtCzW3ek1v_0v_wCpunDeBcIDpeFyLKc')
+
+        # All-in-one method verification
         dk_at_alice = alg.deliver_at_sender(
-            alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, 256, None)
+            alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, enc.key_size, None)
         self.assertEqual(urlsafe_b64encode(dk_at_alice), b'bK8Tcj0UhQrUtCzW3ek1v_0v_wCpunDeBcIDpeFyLKc')
 
+        # Derived key computation at Bob
+
+        # Step-by-step methods verification
+        _shared_key_e_at_bob = bob_static_key.exchange_shared_key(alice_ephemeral_pubkey)
+        self.assertEqual(_shared_key_e_at_bob, _shared_key_e_at_alice)
+
+        _shared_key_s_at_bob = bob_static_key.exchange_shared_key(alice_static_pubkey)
+        self.assertEqual(_shared_key_s_at_bob, _shared_key_s_at_alice)
+
+        _shared_key_at_bob = alg.compute_shared_key(_shared_key_e_at_bob, _shared_key_s_at_bob)
+        self.assertEqual(_shared_key_at_bob, _shared_key_at_alice)
+
+        _fixed_info_at_bob = alg.compute_fixed_info(headers, enc.key_size, None)
+        self.assertEqual(_fixed_info_at_bob, _fixed_info_at_alice)
+
+        _dk_at_bob = alg.compute_derived_key(_shared_key_at_bob, _fixed_info_at_bob, enc.key_size)
+        self.assertEqual(_dk_at_bob, _dk_at_alice)
+
+        # All-in-one method verification
         dk_at_bob = alg.deliver_at_recipient(
-            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, 256, None)
+            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, enc.key_size, None)
         self.assertEqual(dk_at_bob, dk_at_alice)
 
     def test_ecdh_1pu_key_agreement_computation_appx_b(self):
@@ -455,8 +554,52 @@ class JWETest(unittest.TestCase):
         self.assertEqual(urlsafe_b64encode(ciphertext), b'Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFYw')
         self.assertEqual(urlsafe_b64encode(tag), b'HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ')
 
+        # Derived key computation at Alice for Bob
+
+        # Step-by-step methods verification
+        _shared_key_e_at_alice_for_bob = alice_ephemeral_key.exchange_shared_key(bob_static_pubkey)
+        self.assertEqual(
+            _shared_key_e_at_alice_for_bob,
+            b'\x32\x81\x08\x96\xe0\xfe\x4d\x57\x0e\xd1\xac\xfc\xed\xf6\x71\x17' \
+            b'\xdc\x19\x4e\xd5\xda\xac\x21\xd8\xff\x7a\xf3\x24\x46\x94\x89\x7f'
+        )
+
+        _shared_key_s_at_alice_for_bob = alice_static_key.exchange_shared_key(bob_static_pubkey)
+        self.assertEqual(
+            _shared_key_s_at_alice_for_bob,
+            b'\x21\x57\x61\x2c\x90\x48\xed\xfa\xe7\x7c\xb2\xe4\x23\x71\x40\x60' \
+            b'\x59\x67\xc0\x5c\x7f\x77\xa4\x8e\xea\xf2\xcf\x29\xa5\x73\x7c\x4a'
+        )
+
+        _shared_key_at_alice_for_bob = alg.compute_shared_key(_shared_key_e_at_alice_for_bob,
+                                                               _shared_key_s_at_alice_for_bob)
+        self.assertEqual(
+            _shared_key_at_alice_for_bob,
+            b'\x32\x81\x08\x96\xe0\xfe\x4d\x57\x0e\xd1\xac\xfc\xed\xf6\x71\x17' \
+            b'\xdc\x19\x4e\xd5\xda\xac\x21\xd8\xff\x7a\xf3\x24\x46\x94\x89\x7f' \
+            b'\x21\x57\x61\x2c\x90\x48\xed\xfa\xe7\x7c\xb2\xe4\x23\x71\x40\x60' \
+            b'\x59\x67\xc0\x5c\x7f\x77\xa4\x8e\xea\xf2\xcf\x29\xa5\x73\x7c\x4a'
+        )
+
+        _fixed_info_at_alice_for_bob = alg.compute_fixed_info(headers, alg.key_size, tag)
+        self.assertEqual(
+            _fixed_info_at_alice_for_bob,
+            b'\x00\x00\x00\x0f\x45\x43\x44\x48\x2d\x31\x50\x55\x2b\x41\x31\x32' \
+            b'\x38\x4b\x57\x00\x00\x00\x05\x41\x6c\x69\x63\x65\x00\x00\x00\x0f' \
+            b'\x42\x6f\x62\x20\x61\x6e\x64\x20\x43\x68\x61\x72\x6c\x69\x65\x00' \
+            b'\x00\x00\x80\x00\x00\x00\x20\x1c\xb6\xf8\x7d\x39\x66\xf2\xca\x46' \
+            b'\x9a\x28\xf7\x47\x23\xac\xda\x02\x78\x0e\x91\xcc\xe2\x18\x55\x47' \
+            b'\x07\x45\xfe\x11\x9b\xdd\x64'
+        )
+
+        _dk_at_alice_for_bob = alg.compute_derived_key(_shared_key_at_alice_for_bob,
+                                                        _fixed_info_at_alice_for_bob,
+                                                        alg.key_size)
+        self.assertEqual(_dk_at_alice_for_bob, b'\xdf\x4c\x37\xa0\x66\x83\x06\xa1\x1e\x3d\x6b\x00\x74\xb5\xd8\xdf')
+
+        # All-in-one method verification
         dk_at_alice_for_bob = alg.deliver_at_sender(
-            alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, 128, tag)
+            alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, alg.key_size, tag)
         self.assertEqual(dk_at_alice_for_bob, b'\xdf\x4c\x37\xa0\x66\x83\x06\xa1\x1e\x3d\x6b\x00\x74\xb5\xd8\xdf')
 
         kek_at_alice_for_bob = alg.aeskw.prepare_key(dk_at_alice_for_bob)
@@ -466,19 +609,44 @@ class JWETest(unittest.TestCase):
             urlsafe_b64encode(ek_for_bob),
             b'pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQeU1cSl55cQ0hGezJu2N9IY0QN')
 
-        dk_at_bob_for_alice = alg.deliver_at_recipient(
-            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, 128, tag)
-        self.assertEqual(dk_at_bob_for_alice, dk_at_alice_for_bob)
+        # Derived key computation at Alice for Charlie
 
-        kek_at_bob_for_alice = alg.aeskw.prepare_key(dk_at_bob_for_alice)
-        cek_unwrapped_by_bob = alg.aeskw.unwrap(enc, ek_for_bob, headers, kek_at_bob_for_alice)
-        self.assertEqual(cek_unwrapped_by_bob, cek)
+        # Step-by-step methods verification
+        _shared_key_e_at_alice_for_charlie = alice_ephemeral_key.exchange_shared_key(charlie_static_pubkey)
+        self.assertEqual(
+            _shared_key_e_at_alice_for_charlie,
+            b'\x89\xdc\xfe\x4c\x37\xc1\xdc\x02\x71\xf3\x46\xb5\xb3\xb1\x9c\x3b' \
+            b'\x70\x5c\xa2\xa7\x2f\x9a\x23\x77\x85\xc3\x44\x06\xfc\xb7\x5f\x10'
+        )
 
-        payload_decrypted_by_bob = enc.decrypt(ciphertext, aad, iv, tag, cek_unwrapped_by_bob)
-        self.assertEqual(payload_decrypted_by_bob, payload)
+        _shared_key_s_at_alice_for_charlie = alice_static_key.exchange_shared_key(charlie_static_pubkey)
+        self.assertEqual(
+            _shared_key_s_at_alice_for_charlie,
+            b'\x78\xfe\x63\xfc\x66\x1c\xf8\xd1\x8f\x92\xa8\x42\x2a\x64\x18\xe4' \
+            b'\xed\x5e\x20\xa9\x16\x81\x85\xfd\xee\xdc\xa1\xc3\xd8\xe6\xa6\x1c'
+        )
 
+        _shared_key_at_alice_for_charlie = alg.compute_shared_key(_shared_key_e_at_alice_for_charlie,
+                                                                  _shared_key_s_at_alice_for_charlie)
+        self.assertEqual(
+            _shared_key_at_alice_for_charlie,
+            b'\x89\xdc\xfe\x4c\x37\xc1\xdc\x02\x71\xf3\x46\xb5\xb3\xb1\x9c\x3b' \
+            b'\x70\x5c\xa2\xa7\x2f\x9a\x23\x77\x85\xc3\x44\x06\xfc\xb7\x5f\x10' \
+            b'\x78\xfe\x63\xfc\x66\x1c\xf8\xd1\x8f\x92\xa8\x42\x2a\x64\x18\xe4' \
+            b'\xed\x5e\x20\xa9\x16\x81\x85\xfd\xee\xdc\xa1\xc3\xd8\xe6\xa6\x1c'
+        )
+
+        _fixed_info_at_alice_for_charlie = alg.compute_fixed_info(headers, alg.key_size, tag)
+        self.assertEqual(_fixed_info_at_alice_for_charlie, _fixed_info_at_alice_for_bob)
+
+        _dk_at_alice_for_charlie = alg.compute_derived_key(_shared_key_at_alice_for_charlie,
+                                                           _fixed_info_at_alice_for_charlie,
+                                                           alg.key_size)
+        self.assertEqual(_dk_at_alice_for_charlie, b'\x57\xd8\x12\x6f\x1b\x7e\xc4\xcc\xb0\x58\x4d\xac\x03\xcb\x27\xcc')
+
+        # All-in-one method verification
         dk_at_alice_for_charlie = alg.deliver_at_sender(
-            alice_static_key, alice_ephemeral_key, charlie_static_pubkey, headers, 128, tag)
+            alice_static_key, alice_ephemeral_key, charlie_static_pubkey, headers, alg.key_size, tag)
         self.assertEqual(dk_at_alice_for_charlie, b'\x57\xd8\x12\x6f\x1b\x7e\xc4\xcc\xb0\x58\x4d\xac\x03\xcb\x27\xcc')
 
         kek_at_alice_for_charlie = alg.aeskw.prepare_key(dk_at_alice_for_charlie)
@@ -488,8 +656,63 @@ class JWETest(unittest.TestCase):
             urlsafe_b64encode(ek_for_charlie),
             b'56GVudgRLIMEElQ7DpXsijJVRSWUSDNdbWkdV3g0GUNq6hcT_GkxwnxlPIWrTXCqRpVKQC8fe4z3PQ2YH2afvjQ28aiCTWFE')
 
+        # Derived key computation at Bob for Alice
+
+        # Step-by-step methods verification
+        _shared_key_e_at_bob_for_alice = bob_static_key.exchange_shared_key(alice_ephemeral_pubkey)
+        self.assertEqual(_shared_key_e_at_bob_for_alice, _shared_key_e_at_alice_for_bob)
+
+        _shared_key_s_at_bob_for_alice = bob_static_key.exchange_shared_key(alice_static_pubkey)
+        self.assertEqual(_shared_key_s_at_bob_for_alice, _shared_key_s_at_alice_for_bob)
+
+        _shared_key_at_bob_for_alice = alg.compute_shared_key(_shared_key_e_at_bob_for_alice,
+                                                              _shared_key_s_at_bob_for_alice)
+        self.assertEqual(_shared_key_at_bob_for_alice, _shared_key_at_alice_for_bob)
+
+        _fixed_info_at_bob_for_alice = alg.compute_fixed_info(headers, alg.key_size, tag)
+        self.assertEqual(_fixed_info_at_bob_for_alice, _fixed_info_at_alice_for_bob)
+
+        _dk_at_bob_for_alice = alg.compute_derived_key(_shared_key_at_bob_for_alice,
+                                                       _fixed_info_at_bob_for_alice,
+                                                       alg.key_size)
+        self.assertEqual(_dk_at_bob_for_alice, _dk_at_alice_for_bob)
+
+        # All-in-one method verification
+        dk_at_bob_for_alice = alg.deliver_at_recipient(
+            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, alg.key_size, tag)
+        self.assertEqual(dk_at_bob_for_alice, dk_at_alice_for_bob)
+
+        kek_at_bob_for_alice = alg.aeskw.prepare_key(dk_at_bob_for_alice)
+        cek_unwrapped_by_bob = alg.aeskw.unwrap(enc, ek_for_bob, headers, kek_at_bob_for_alice)
+        self.assertEqual(cek_unwrapped_by_bob, cek)
+
+        payload_decrypted_by_bob = enc.decrypt(ciphertext, aad, iv, tag, cek_unwrapped_by_bob)
+        self.assertEqual(payload_decrypted_by_bob, payload)
+
+        # Derived key computation at Charlie for Alice
+
+        # Step-by-step methods verification
+        _shared_key_e_at_charlie_for_alice = charlie_static_key.exchange_shared_key(alice_ephemeral_pubkey)
+        self.assertEqual(_shared_key_e_at_charlie_for_alice, _shared_key_e_at_alice_for_charlie)
+
+        _shared_key_s_at_charlie_for_alice = charlie_static_key.exchange_shared_key(alice_static_pubkey)
+        self.assertEqual(_shared_key_s_at_charlie_for_alice, _shared_key_s_at_alice_for_charlie)
+
+        _shared_key_at_charlie_for_alice = alg.compute_shared_key(_shared_key_e_at_charlie_for_alice,
+                                                                  _shared_key_s_at_charlie_for_alice)
+        self.assertEqual(_shared_key_at_charlie_for_alice, _shared_key_at_alice_for_charlie)
+
+        _fixed_info_at_charlie_for_alice = alg.compute_fixed_info(headers, alg.key_size, tag)
+        self.assertEqual(_fixed_info_at_charlie_for_alice, _fixed_info_at_alice_for_charlie)
+
+        _dk_at_charlie_for_alice = alg.compute_derived_key(_shared_key_at_charlie_for_alice,
+                                                           _fixed_info_at_charlie_for_alice,
+                                                           alg.key_size)
+        self.assertEqual(_dk_at_charlie_for_alice, _dk_at_alice_for_charlie)
+
+        # All-in-one method verification
         dk_at_charlie_for_alice = alg.deliver_at_recipient(
-            charlie_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, 128, tag)
+            charlie_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, alg.key_size, tag)
         self.assertEqual(dk_at_charlie_for_alice, dk_at_alice_for_charlie)
 
         kek_at_charlie_for_alice = alg.aeskw.prepare_key(dk_at_charlie_for_alice)
