@@ -1,4 +1,5 @@
 cryptography
+pycryptodomex
 Flask
 Django
 SQLAlchemy

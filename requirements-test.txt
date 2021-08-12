@@ -1,4 +1,5 @@
 cryptography
+pycryptodomex
 requests
 pytest
 coverage
