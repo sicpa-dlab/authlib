@@ -1,5 +1,5 @@
 cryptography
-pycryptodomex
+pycryptodomex>=3.10,<4
 Flask
 Django
 SQLAlchemy
