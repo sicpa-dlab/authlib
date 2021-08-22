@@ -44,6 +44,15 @@ class InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError(JoseError):
             description=description)
 
 
+class InvalidAlgorithmForMultipleRecipientsMode(JoseError):
+    error = 'invalid_algorithm_for_multiple_recipients_mode'
+
+    def __init__(self, alg):
+        description = '{} algorithm cannot be used in multiple recipients mode'.format(alg)
+        super(InvalidAlgorithmForMultipleRecipientsMode, self).__init__(
+            description=description)
+
+
 class MissingEncryptionAlgorithmError(JoseError):
     error = 'missing_encryption_algorithm'
     description = 'Missing "enc" in header'

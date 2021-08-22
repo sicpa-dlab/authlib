@@ -577,7 +577,7 @@ class JWETest(unittest.TestCase):
             "d": "x8EVZH4Fwk673_mUujnliJoSrLz0zYzzCWp5GUX2fc8"
         }
 
-        headers = OrderedDict({
+        protected = OrderedDict({
             "alg": "ECDH-1PU+A128KW",
             "enc": "A256CBC-HS512",
             "apu": "QWxpY2U",
@@ -611,7 +611,7 @@ class JWETest(unittest.TestCase):
         charlie_static_pubkey = charlie_static_key.get_op_key('wrapKey')
         alice_ephemeral_pubkey = alice_ephemeral_key.get_op_key('wrapKey')
 
-        protected_segment = json_b64encode(headers)
+        protected_segment = json_b64encode(protected)
         aad = to_bytes(protected_segment, 'ascii')
 
         ciphertext, tag = enc.encrypt(payload, aad, iv, cek)
@@ -636,7 +636,7 @@ class JWETest(unittest.TestCase):
         )
 
         _shared_key_at_alice_for_bob = alg.compute_shared_key(_shared_key_e_at_alice_for_bob,
-                                                               _shared_key_s_at_alice_for_bob)
+                                                              _shared_key_s_at_alice_for_bob)
         self.assertEqual(
             _shared_key_at_alice_for_bob,
             b'\x32\x81\x08\x96\xe0\xfe\x4d\x57\x0e\xd1\xac\xfc\xed\xf6\x71\x17' +
@@ -645,7 +645,7 @@ class JWETest(unittest.TestCase):
             b'\x59\x67\xc0\x5c\x7f\x77\xa4\x8e\xea\xf2\xcf\x29\xa5\x73\x7c\x4a'
         )
 
-        _fixed_info_at_alice_for_bob = alg.compute_fixed_info(headers, alg.key_size, tag)
+        _fixed_info_at_alice_for_bob = alg.compute_fixed_info(protected, alg.key_size, tag)
         self.assertEqual(
             _fixed_info_at_alice_for_bob,
             b'\x00\x00\x00\x0f\x45\x43\x44\x48\x2d\x31\x50\x55\x2b\x41\x31\x32' +
@@ -657,13 +657,13 @@ class JWETest(unittest.TestCase):
         )
 
         _dk_at_alice_for_bob = alg.compute_derived_key(_shared_key_at_alice_for_bob,
-                                                        _fixed_info_at_alice_for_bob,
-                                                        alg.key_size)
+                                                       _fixed_info_at_alice_for_bob,
+                                                       alg.key_size)
         self.assertEqual(_dk_at_alice_for_bob, b'\xdf\x4c\x37\xa0\x66\x83\x06\xa1\x1e\x3d\x6b\x00\x74\xb5\xd8\xdf')
 
         # All-in-one method verification
         dk_at_alice_for_bob = alg.deliver_at_sender(
-            alice_static_key, alice_ephemeral_key, bob_static_pubkey, headers, alg.key_size, tag)
+            alice_static_key, alice_ephemeral_key, bob_static_pubkey, protected, alg.key_size, tag)
         self.assertEqual(dk_at_alice_for_bob, b'\xdf\x4c\x37\xa0\x66\x83\x06\xa1\x1e\x3d\x6b\x00\x74\xb5\xd8\xdf')
 
         kek_at_alice_for_bob = alg.aeskw.prepare_key(dk_at_alice_for_bob)
@@ -700,7 +700,7 @@ class JWETest(unittest.TestCase):
             b'\xed\x5e\x20\xa9\x16\x81\x85\xfd\xee\xdc\xa1\xc3\xd8\xe6\xa6\x1c'
         )
 
-        _fixed_info_at_alice_for_charlie = alg.compute_fixed_info(headers, alg.key_size, tag)
+        _fixed_info_at_alice_for_charlie = alg.compute_fixed_info(protected, alg.key_size, tag)
         self.assertEqual(_fixed_info_at_alice_for_charlie, _fixed_info_at_alice_for_bob)
 
         _dk_at_alice_for_charlie = alg.compute_derived_key(_shared_key_at_alice_for_charlie,
@@ -710,7 +710,7 @@ class JWETest(unittest.TestCase):
 
         # All-in-one method verification
         dk_at_alice_for_charlie = alg.deliver_at_sender(
-            alice_static_key, alice_ephemeral_key, charlie_static_pubkey, headers, alg.key_size, tag)
+            alice_static_key, alice_ephemeral_key, charlie_static_pubkey, protected, alg.key_size, tag)
         self.assertEqual(dk_at_alice_for_charlie, b'\x57\xd8\x12\x6f\x1b\x7e\xc4\xcc\xb0\x58\x4d\xac\x03\xcb\x27\xcc')
 
         kek_at_alice_for_charlie = alg.aeskw.prepare_key(dk_at_alice_for_charlie)
@@ -733,7 +733,7 @@ class JWETest(unittest.TestCase):
                                                               _shared_key_s_at_bob_for_alice)
         self.assertEqual(_shared_key_at_bob_for_alice, _shared_key_at_alice_for_bob)
 
-        _fixed_info_at_bob_for_alice = alg.compute_fixed_info(headers, alg.key_size, tag)
+        _fixed_info_at_bob_for_alice = alg.compute_fixed_info(protected, alg.key_size, tag)
         self.assertEqual(_fixed_info_at_bob_for_alice, _fixed_info_at_alice_for_bob)
 
         _dk_at_bob_for_alice = alg.compute_derived_key(_shared_key_at_bob_for_alice,
@@ -743,11 +743,11 @@ class JWETest(unittest.TestCase):
 
         # All-in-one method verification
         dk_at_bob_for_alice = alg.deliver_at_recipient(
-            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, alg.key_size, tag)
+            bob_static_key, alice_static_pubkey, alice_ephemeral_pubkey, protected, alg.key_size, tag)
         self.assertEqual(dk_at_bob_for_alice, dk_at_alice_for_bob)
 
         kek_at_bob_for_alice = alg.aeskw.prepare_key(dk_at_bob_for_alice)
-        cek_unwrapped_by_bob = alg.aeskw.unwrap(enc, ek_for_bob, headers, kek_at_bob_for_alice)
+        cek_unwrapped_by_bob = alg.aeskw.unwrap(enc, ek_for_bob, protected, kek_at_bob_for_alice)
         self.assertEqual(cek_unwrapped_by_bob, cek)
 
         payload_decrypted_by_bob = enc.decrypt(ciphertext, aad, iv, tag, cek_unwrapped_by_bob)
@@ -766,7 +766,7 @@ class JWETest(unittest.TestCase):
                                                                   _shared_key_s_at_charlie_for_alice)
         self.assertEqual(_shared_key_at_charlie_for_alice, _shared_key_at_alice_for_charlie)
 
-        _fixed_info_at_charlie_for_alice = alg.compute_fixed_info(headers, alg.key_size, tag)
+        _fixed_info_at_charlie_for_alice = alg.compute_fixed_info(protected, alg.key_size, tag)
         self.assertEqual(_fixed_info_at_charlie_for_alice, _fixed_info_at_alice_for_charlie)
 
         _dk_at_charlie_for_alice = alg.compute_derived_key(_shared_key_at_charlie_for_alice,
@@ -776,11 +776,11 @@ class JWETest(unittest.TestCase):
 
         # All-in-one method verification
         dk_at_charlie_for_alice = alg.deliver_at_recipient(
-            charlie_static_key, alice_static_pubkey, alice_ephemeral_pubkey, headers, alg.key_size, tag)
+            charlie_static_key, alice_static_pubkey, alice_ephemeral_pubkey, protected, alg.key_size, tag)
         self.assertEqual(dk_at_charlie_for_alice, dk_at_alice_for_charlie)
 
         kek_at_charlie_for_alice = alg.aeskw.prepare_key(dk_at_charlie_for_alice)
-        cek_unwrapped_by_charlie = alg.aeskw.unwrap(enc, ek_for_charlie, headers, kek_at_charlie_for_alice)
+        cek_unwrapped_by_charlie = alg.aeskw.unwrap(enc, ek_for_charlie, protected, kek_at_charlie_for_alice)
         self.assertEqual(cek_unwrapped_by_charlie, cek)
 
         payload_decrypted_by_charlie = enc.decrypt(ciphertext, aad, iv, tag, cek_unwrapped_by_charlie)
@@ -885,6 +885,73 @@ class JWETest(unittest.TestCase):
                 data = jwe.serialize_compact(protected, b'hello', bob_key, sender_key=alice_key)
                 rv = jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
                 self.assertEqual(rv['payload'], b'hello')
+
+    def test_ecdh_1pu_jwe_json_serialization(self):
+        jwe = JsonWebEncryption()
+
+        alice_static_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4",
+            "d": "i9KuFhSzEBsiv3PKVL5115OCdsqQai5nj_Flzfkw5jU"
+        })
+        bob_static_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
+            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
+        })
+        charlie_static_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
+            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
+        })
+
+        protected = OrderedDict({
+            "alg": "ECDH-1PU+A128KW",
+            "enc": "A256CBC-HS512",
+            "apu": "QWxpY2U",
+            "apv": "Qm9iIGFuZCBDaGFybGll"
+        })
+
+        recipients = [
+            OrderedDict({
+                "header": OrderedDict({
+                    "kid": "bob-key-2"
+                })
+            }),
+            OrderedDict({
+                "header": OrderedDict({
+                    "kid": "2021-05-06"
+                })
+            })
+        ]
+
+        unprotected = OrderedDict({
+            "jku": "https://alice.example.com/keys.jwks"
+        })
+
+        aad = b'Authenticate me too.'
+
+        header_obj = OrderedDict({
+            "protected": protected,
+            "unprotected": unprotected,
+            "recipients": recipients,
+            "aad": aad
+        })
+
+        payload = b'Three is a magic number.'
+
+        data = jwe.serialize_json(header_obj, payload, [bob_static_key, charlie_static_key], sender_key=alice_static_key)
+
+        rv = jwe.deserialize_json(data, charlie_static_key, sender_key=alice_static_key)
+
+        self.assertEqual(rv['header']['protected'], protected)
+        self.assertEqual(rv['header']['unprotected'], unprotected)
+        self.assertEqual(rv['header']['aad'], aad)
+        self.assertEqual(rv['header']['recipients'], recipients)
+        self.assertEqual(rv['payload'], payload)
 
     def test_ecdh_1pu_encryption_fails_if_not_aes_cbc_hmac_sha2_enc_is_used_with_kw(self):
         jwe = JsonWebEncryption()
