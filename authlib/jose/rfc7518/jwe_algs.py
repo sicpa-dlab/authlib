@@ -214,7 +214,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
         return ECKey.import_key(raw_data)
 
     def generate_preset(self, enc_alg, key):
-        epk = key.generate_key(key['crv'], is_private=True)
+        epk = self._generate_ephemeral_key(key)
         h = self._prepare_headers(epk)
         preset = {'epk': epk, 'header': h}
         if self.key_size is not None:
@@ -254,6 +254,9 @@ class ECDHESAlgorithm(JWEAlgorithm):
         fixed_info = self.compute_fixed_info(headers, bit_size)
         return self.compute_derived_key(shared_key, fixed_info, bit_size)
 
+    def _generate_ephemeral_key(self, key):
+        return key.generate_key(key['crv'], is_private=True)
+
     def _prepare_headers(self, epk):
         # REQUIRED_JSON_FIELDS contains only public fields
         pub_epk = {k: epk[k] for k in epk.REQUIRED_JSON_FIELDS}
@@ -270,7 +273,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
             epk = preset['epk']
             h = {}
         else:
-            epk = key.generate_key(key['crv'], is_private=True)
+            epk = self._generate_ephemeral_key(key)
             h = self._prepare_headers(epk)
 
         public_key = key.get_op_key('wrapKey')

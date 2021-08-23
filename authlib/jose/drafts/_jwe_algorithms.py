@@ -33,7 +33,7 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
         return ECKey.import_key(raw_data)
 
     def generate_preset(self, enc_alg, key):
-        epk = key.generate_key(key['crv'], is_private=True)
+        epk = self._generate_ephemeral_key(key)
         h = self._prepare_headers(epk)
         preset = {'epk': epk, 'header': h}
         if self.key_size is not None:
