@@ -53,6 +53,11 @@ class InvalidAlgorithmForMultipleRecipientsMode(JoseError):
             description=description)
 
 
+class KeyMismatchError(JoseError):
+    error = 'key_mismatch_error'
+    description = 'Key does not match to any recipient'
+
+
 class MissingEncryptionAlgorithmError(JoseError):
     error = 'missing_encryption_algorithm'
     description = 'Missing "enc" in header'

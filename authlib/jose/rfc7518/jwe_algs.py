@@ -283,7 +283,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
             return {'ek': b'', 'cek': dk, 'header': h}
 
         if preset and 'cek' in preset:
-            preset_for_kw = {'cek': preset.cek}
+            preset_for_kw = {'cek': preset['cek']}
         else:
             preset_for_kw = None
 

@@ -16,7 +16,7 @@ from authlib.jose.errors import (
     MissingEncryptionAlgorithmError,
     UnsupportedEncryptionAlgorithmError,
     UnsupportedCompressionAlgorithmError,
-    InvalidHeaderParameterNameError, InvalidAlgorithmForMultipleRecipientsMode,
+    InvalidHeaderParameterNameError, InvalidAlgorithmForMultipleRecipientsMode, KeyMismatchError,
 )
 
 
@@ -268,8 +268,7 @@ class JsonWebEncryption(object):
         for recipient in recipients:
             if not recipient['header']:
                 del recipient['header']
-            if recipient['encrypted_key']:
-                recipient['encrypted_key'] = to_unicode(urlsafe_b64encode(recipient['encrypted_key']))
+            recipient['encrypted_key'] = to_unicode(urlsafe_b64encode(recipient['encrypted_key']))
         obj['recipients'] = recipients
 
         if jwe_aad is not None:
@@ -342,7 +341,7 @@ class JsonWebEncryption(object):
         return {'header': protected, 'payload': payload}
 
     def deserialize_json(self, obj, key, decode=None, sender_key=None):
-        obj = ensure_dict(obj, 'JWE')
+        obj = self.parse_json(obj)
         obj = deepcopy(obj)
 
         if 'protected' in obj:
@@ -354,6 +353,8 @@ class JsonWebEncryption(object):
 
         recipients = obj['recipients']
         for recipient in recipients:
+            if 'header' not in recipient:
+                recipient['header'] = {}
             recipient['encrypted_key'] = extract_segment(
                 to_bytes(recipient['encrypted_key']), DecodeError, 'encrypted key')
 
@@ -400,14 +401,20 @@ class JsonWebEncryption(object):
                         return unwrap_func(recipient['encrypted_key'], header)
 
             # Since no explicit match has been found, iterate over all the recipients
+            error = None
             for recipient in recipients:
+                if 'kid' in recipient['header'] and key.kid is not None and recipient['header']['kid'] != key.kid:
+                    continue
                 header = JWEHeader(protected, unprotected, recipient['header'])
                 try:
                     return unwrap_func(recipient['encrypted_key'], header)
                 except Exception as e:
                     error = e
             else:
-                raise error
+                if error is None:
+                    raise KeyMismatchError()
+                else:
+                    raise error
 
         if isinstance(alg, JWEAlgorithmWithTagAwareKeyAgreement):
             # For a JWE algorithm with tag-aware key agreement:
@@ -454,6 +461,10 @@ class JsonWebEncryption(object):
             'header': header,
             'payload': payload
         }
+
+    @staticmethod
+    def parse_json(obj):
+        return ensure_dict(obj, 'JWE')
 
     def get_header_alg(self, header):
         if 'alg' not in header:
