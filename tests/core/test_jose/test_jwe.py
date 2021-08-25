@@ -1965,6 +1965,82 @@ class JWETest(unittest.TestCase):
             protected, b'hello', bob_key, sender_key=alice_key
         )
 
+    def test_ecdh_1pu_encryption_for_multiple_recipients_fails_if_key_types_are_different(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU+A128KW', 'enc': 'A128CBC-HS256'}
+        header_obj = {'protected': protected}
+
+        alice_key = ECKey.generate_key('P-256', is_private=True)
+        bob_key = ECKey.generate_key('P-256', is_private=False)
+        charlie_key = OKPKey.generate_key('X25519', is_private=False)
+
+        self.assertRaises(
+            Exception,
+            jwe.serialize_json,
+            header_obj, b'hello', [bob_key, charlie_key], sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_for_multiple_recipients_fails_if_keys_curves_are_different(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU+A128KW', 'enc': 'A128CBC-HS256'}
+        header_obj = {'protected': protected}
+
+        alice_key = OKPKey.generate_key('X25519', is_private=True)
+        bob_key = OKPKey.generate_key('X448', is_private=False)
+        charlie_key = OKPKey.generate_key('X25519', is_private=False)
+
+        self.assertRaises(
+            TypeError,
+            jwe.serialize_json,
+            header_obj, b'hello', [bob_key, charlie_key], sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_for_multiple_recipients_fails_if_key_points_are_not_actually_on_same_curve(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU+A128KW', 'enc': 'A128CBC-HS256'}
+        header_obj = {'protected': protected}
+
+        alice_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "aDHtGkIYyhR5geqfMaFL0T9cG4JEMI8nyMFJA7gRUDs",
+            "y": "AjGN5_f-aCt4vYg74my6n1ALIq746nlc_httIgcBSYY",
+            "d": "Sim3EIzXsWaWu9QW8yKVHwxBM5CTlnrVU_Eq-y_KRQA"
+        }  # the point is indeed on P-256 curve
+        bob_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "HgF88mm6yw4gjG7yG6Sqz66pHnpZcyx7c842BQghYuc",
+            "y": "KZ1ywvTOYnpNb4Gepa5eSgfEOb5gj5hCaCFIrTFuI2o"
+        }  # the point is indeed on P-256 curve
+        charlie_key = {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "5ZFnZbs_BtLBIZxwt5hS7SBDtI2a-dJ871dJ8ZnxZ6c",
+            "y": "K0srqSkbo1Yeckr0YoQA8r_rOz0ZUStiv3mc1qn46pg"
+        }  # the point is not on P-256 curve but is actually on secp256k1 curve
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_json,
+            header_obj, b'hello', [bob_key, charlie_key], sender_key=alice_key
+        )
+
+    def test_ecdh_1pu_encryption_for_multiple_recipients_fails_if_keys_curve_is_inappropriate(self):
+        jwe = JsonWebEncryption()
+        protected = {'alg': 'ECDH-1PU+A128KW', 'enc': 'A128CBC-HS256'}
+        header_obj = {'protected': protected}
+
+        alice_key = OKPKey.generate_key('Ed25519', is_private=True)  # use Ed25519 instead of X25519
+        bob_key = OKPKey.generate_key('Ed25519', is_private=False)  # use Ed25519 instead of X25519
+        charlie_key = OKPKey.generate_key('Ed25519', is_private=False)  # use Ed25519 instead of X25519
+
+        self.assertRaises(
+            ValueError,
+            jwe.serialize_json,
+            header_obj, b'hello', [bob_key, charlie_key], sender_key=alice_key
+        )
+
     def test_ecdh_1pu_decryption_fails_if_key_implicitly_matches_to_no_recipient(self):
         jwe = JsonWebEncryption()
 
@@ -2121,6 +2197,113 @@ class JWETest(unittest.TestCase):
             jwe.serialize_compact,
             protected, b'hello', key2
         )
+
+    def test_decryption_of_message_to_multiple_recipients_by_matching_key(self):
+        jwe = JsonWebEncryption()
+
+        alice_public_key = OKPKey.import_key({
+            "kid": "Alice's X25519 key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4"
+        })
+
+        key_store = {}
+
+        charlie_X448_key = OKPKey.import_key({
+            "kid": "Charlie's X448 key",
+            "kty": "OKP",
+            "crv": "X448",
+            "x": "M-OMugy74ksznVQ-Bp6MC_-GEPSrT8yiAtminJvw0j_UxJtpNHl_hcWMSf_Pfm_ws0vVWvAfwwA",
+            "d": "VGZPkclj_7WbRaRMzBqxpzXIpc2xz1d3N1ay36UxdVLfKaP33hABBMpddTRv1f-hRsQUNvmlGOg"
+        })
+        key_store[charlie_X448_key.kid] = charlie_X448_key
+
+        charlie_X25519_key = OKPKey.import_key({
+            "kid": "Charlie's X25519 key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
+            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
+        })
+        key_store[charlie_X25519_key.kid] = charlie_X25519_key
+
+        data = """
+            {
+                "protected": "eyJhbGciOiJFQ0RILTFQVStBMTI4S1ciLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYXB1IjoiUVd4cFkyVSIsImFwdiI6IlFtOWlJR0Z1WkNCRGFHRnliR2xsIiwiZXBrIjp7Imt0eSI6Ik9LUCIsImNydiI6IlgyNTUxOSIsIngiOiJrOW9mX2NwQWFqeTBwb1c1Z2FpeFhHczluSGt3ZzFBRnFVQUZhMzlkeUJjIn19",
+                "unprotected": {
+                    "jku": "https://alice.example.com/keys.jwks"
+                },
+                "recipients": [
+                    {
+                        "header": {
+                            "kid": "Bob's X25519 key"
+                        },
+                        "encrypted_key": "pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQeU1cSl55cQ0hGezJu2N9IY0QN"
+                    },
+                    {
+                        "header": {
+                            "kid": "Charlie's X25519 key"
+                        },
+                        "encrypted_key": "56GVudgRLIMEElQ7DpXsijJVRSWUSDNdbWkdV3g0GUNq6hcT_GkxwnxlPIWrTXCqRpVKQC8fe4z3PQ2YH2afvjQ28aiCTWFE"
+                    }
+                ],
+                "iv": "AAECAwQFBgcICQoLDA0ODw",
+                "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFYw",
+                "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ"
+            }"""
+
+        parsed_data = jwe.parse_json(data)
+
+        available_key_id = next(recipient['header']['kid'] for recipient in parsed_data['recipients']
+                                if recipient['header']['kid'] in key_store.keys())
+        available_key = key_store[available_key_id]
+
+        rv = jwe.deserialize_json(parsed_data, available_key, sender_key=alice_public_key)
+
+        self.assertEqual(rv.keys(), {'header', 'payload'})
+
+        self.assertEqual(rv['header'].keys(), {'protected', 'unprotected', 'recipients'})
+
+        self.assertEqual(
+            rv['header']['protected'],
+            {
+                "alg": "ECDH-1PU+A128KW",
+                "enc": "A256CBC-HS512",
+                "apu": "QWxpY2U",
+                "apv": "Qm9iIGFuZCBDaGFybGll",
+                "epk": {
+                    "kty": "OKP",
+                    "crv": "X25519",
+                    "x": "k9of_cpAajy0poW5gaixXGs9nHkwg1AFqUAFa39dyBc"
+                }
+            }
+        )
+
+        self.assertEqual(
+            rv['header']['unprotected'],
+            {
+                "jku": "https://alice.example.com/keys.jwks"
+            }
+        )
+
+        self.assertEqual(
+            rv['header']['recipients'],
+            [
+                {
+                    "header": {
+                        "kid": "Bob's X25519 key"
+                    }
+                },
+                {
+                    "header": {
+                        "kid": "Charlie's X25519 key"
+                    }
+                }
+            ]
+        )
+
+        self.assertEqual(rv['payload'], b'Three is a magic number.')
 
     def test_decryption_of_json_string(self):
         jwe = JsonWebEncryption()
