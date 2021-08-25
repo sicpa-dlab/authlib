@@ -282,6 +282,12 @@ class JsonWebEncryption(object):
 
         return obj
 
+    def serialize(self, header_obj, payload, keys, sender_key=None):
+        if 'protected' in header_obj or 'unprotected' in header_obj or 'recipients' in header_obj:
+            return self.serialize_json(header_obj, payload, keys, sender_key)
+
+        return self.serialize_compact(header_obj, payload, keys, sender_key)
+
     def deserialize_compact(self, s, key, decode=None, sender_key=None):
         """Exact JWS Compact Serialization, and validate with the given key.
 
@@ -461,6 +467,16 @@ class JsonWebEncryption(object):
             'header': header,
             'payload': payload
         }
+
+    def deserialize(self, obj, key, decode=None, sender_key=None):
+        if isinstance(obj, dict):
+            return self.deserialize_json(obj, key, decode, sender_key)
+
+        obj = to_bytes(obj)
+        if obj.startswith(b'{') and obj.endswith(b'}'):
+            return self.deserialize_json(obj, key, decode, sender_key)
+
+        return self.deserialize_compact(obj, key, decode, sender_key)
 
     @staticmethod
     def parse_json(obj):
