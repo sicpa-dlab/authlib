@@ -250,8 +250,6 @@ class JsonWebEncryption(object):
                 "aad": b'Authenticate me too.'
             }
         """
-        if isinstance(keys, tuple):  # tuple instead of list
-            keys = list(keys)
         if not isinstance(keys, list):  # single key
             keys = [keys]
 
@@ -415,6 +413,7 @@ class JsonWebEncryption(object):
 
         :param s: JWE Compact Serialization as bytes
         :param key: Private key used to decrypt payload
+            (optionally can be a tuple of kid and essentially key)
         :param decode: Function to decode payload data
         :param sender_key: Sender's public key in case
             JWEAlgorithmWithTagAwareKeyAgreement is used
@@ -440,7 +439,12 @@ class JsonWebEncryption(object):
         self._validate_sender_key(sender_key, alg)
         self._validate_private_headers(protected, alg)
 
+        if isinstance(key, tuple) and len(key) == 2:
+            # Ignore separately provided kid, extract essentially key only
+            key = key[1]
+
         key = prepare_key(alg, protected, key)
+
         if sender_key is not None:
             sender_key = alg.prepare_key(sender_key)
 
@@ -475,6 +479,7 @@ class JsonWebEncryption(object):
 
         :param obj: JWE JSON Serialization as dict or str
         :param key: Private key used to decrypt payload
+            (optionally can be a tuple of kid and essentially key)
         :param decode: Function to decode payload data
         :param sender_key: Sender's public key in case
             JWEAlgorithmWithTagAwareKeyAgreement is used
@@ -521,7 +526,18 @@ class JsonWebEncryption(object):
         for recipient in recipients:
             self._validate_private_headers(recipient['header'], alg)
 
+        kid = None
+        if isinstance(key, tuple) and len(key) == 2:
+            # Extract separately provided kid and essentially key
+            kid = key[0]
+            key = key[1]
+
         key = alg.prepare_key(key)
+
+        if kid is None:
+            # If kid has not been provided separately, try to get it from key itself
+            kid = key.kid
+
         if sender_key is not None:
             sender_key = alg.prepare_key(sender_key)
 
@@ -535,16 +551,16 @@ class JsonWebEncryption(object):
             return alg.unwrap(enc, ek, header, key)
 
         def _unwrap_for_matching_recipient(unwrap_func):
-            if key.kid is not None:
+            if kid is not None:
                 for recipient in recipients:
-                    if recipient['header'].get('kid') == key.kid:
+                    if recipient['header'].get('kid') == kid:
                         header = JWEHeader(protected, unprotected, recipient['header'])
                         return unwrap_func(recipient['encrypted_key'], header)
 
             # Since no explicit match has been found, iterate over all the recipients
             error = None
             for recipient in recipients:
-                if 'kid' in recipient['header'] and key.kid is not None and recipient['header']['kid'] != key.kid:
+                if 'kid' in recipient['header'] and kid is not None and recipient['header']['kid'] != kid:
                     continue
                 header = JWEHeader(protected, unprotected, recipient['header'])
                 try:
@@ -611,6 +627,7 @@ class JsonWebEncryption(object):
         :param obj: JWE compact serialization as bytes or
             JWE JSON serialization as dict or str
         :param key: Private key used to decrypt payload
+            (optionally can be a tuple of kid and essentially key)
         :param decode: Function to decode payload data
         :param sender_key: Sender's public key in case
             JWEAlgorithmWithTagAwareKeyAgreement is used
