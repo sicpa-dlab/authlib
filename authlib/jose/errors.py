@@ -29,8 +29,26 @@ class InvalidHeaderParameterNameError(JoseError):
     error = 'invalid_header_parameter_name'
 
     def __init__(self, name):
-        description = 'Invalid Header Parameter Names: {}'.format(name)
+        description = 'Invalid Header Parameter Name: {}'.format(name)
         super(InvalidHeaderParameterNameError, self).__init__(
+            description=description)
+
+
+class InvalidJweMemberNameError(JoseError):
+    error = 'invalid_jwe_member_name_error'
+
+    def __init__(self, name):
+        description = 'Invalid JWE Member Name: {}'.format(name)
+        super(InvalidJweMemberNameError, self).__init__(
+            description=description)
+
+
+class InvalidRecipientMemberNameError(JoseError):
+    error = 'invalid_recipient_member_name_error'
+
+    def __init__(self, name):
+        description = 'Invalid Recipient Member Name: {}'.format(name)
+        super(InvalidRecipientMemberNameError, self).__init__(
             description=description)
 
 

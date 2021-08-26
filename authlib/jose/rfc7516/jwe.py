@@ -17,6 +17,7 @@ from authlib.jose.errors import (
     UnsupportedEncryptionAlgorithmError,
     UnsupportedCompressionAlgorithmError,
     InvalidHeaderParameterNameError, InvalidAlgorithmForMultipleRecipientsMode, KeyMismatchError,
+    InvalidJweMemberNameError, InvalidRecipientMemberNameError,
 )
 
 
@@ -27,6 +28,23 @@ class JsonWebEncryption(object):
         'jku', 'jwk', 'kid',
         'x5u', 'x5c', 'x5t', 'x5t#S256',
         'typ', 'cty', 'crit'
+    ])
+
+    # Allowed members of JWE in JSON serialization syntax
+    JWE_MEMBERS = frozenset([
+        'protected',
+        'unprotected',
+        'iv',
+        'aad',
+        'ciphertext',
+        'tag',
+        'recipients'
+    ])
+
+    # Allowed members of `recipients` list element in JSON serialization syntax
+    RECIPIENT_MEMBERS = frozenset([
+        'header',
+        'encrypted_key'
     ])
 
     ALG_REGISTRY = {}
@@ -283,6 +301,7 @@ class JsonWebEncryption(object):
         self._validate_sender_key(sender_key, alg)
         self._validate_private_headers(shared_header, alg)
         for recipient in recipients:
+            self._validate_recipient_members(recipient)
             self._validate_private_headers(recipient['header'], alg)
 
         for i in range(len(keys)):
@@ -488,6 +507,8 @@ class JsonWebEncryption(object):
             `aad` keys
         """
         obj = ensure_dict(obj, 'JWE')
+        self._validate_jwe_members(obj)
+
         obj = deepcopy(obj)
 
         if 'protected' in obj:
@@ -524,6 +545,7 @@ class JsonWebEncryption(object):
         self._validate_sender_key(sender_key, alg)
         self._validate_private_headers(shared_header, alg)
         for recipient in recipients:
+            self._validate_recipient_members(recipient)
             self._validate_private_headers(recipient['header'], alg)
 
         kid = None
@@ -705,6 +727,16 @@ class JsonWebEncryption(object):
         for k in header:
             if k not in names:
                 raise InvalidHeaderParameterNameError(k)
+
+    def _validate_jwe_members(self, obj):
+        for k in obj:
+            if k not in self.JWE_MEMBERS:
+                raise InvalidJweMemberNameError(k)
+
+    def _validate_recipient_members(self, recipient):
+        for k in recipient:
+            if k not in self.RECIPIENT_MEMBERS:
+                raise InvalidRecipientMemberNameError(k)
 
 
 def prepare_key(alg, header, key):

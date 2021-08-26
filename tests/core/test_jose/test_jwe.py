@@ -9,8 +9,9 @@ from authlib.common.encoding import urlsafe_b64encode, json_b64encode, to_bytes,
 from authlib.jose import JsonWebEncryption
 from authlib.jose import OctKey, OKPKey
 from authlib.jose import errors, ECKey
-from authlib.jose.errors import InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError, KeyMismatchError, \
-    InvalidAlgorithmForMultipleRecipientsMode, DecodeError
+from authlib.jose.errors import InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError, \
+    InvalidAlgorithmForMultipleRecipientsMode, DecodeError, InvalidHeaderParameterNameError, \
+    InvalidRecipientMemberNameError, InvalidJweMemberNameError
 from authlib.jose.rfc7516.models import JWEHeader
 from tests.util import read_file_path
 
@@ -238,6 +239,205 @@ class JWETest(unittest.TestCase):
             protected, b'hello', b'invalid-key'
         )
 
+    def test_serialize_compact_fails_if_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM",
+            "foo": "bar"
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.serialize_compact,
+            protected, b'hello', key
+        )
+
+    def test_serialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM",
+            "foo": "bar"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.serialize_json,
+            header_obj, b'hello', key
+        )
+
+    def test_serialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        unprotected = {
+            "foo": "bar"
+        }
+        header_obj = {
+            "protected": protected,
+            "unprotected": unprotected
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.serialize_json,
+            header_obj, b'hello', key
+        )
+
+    def test_serialize_json_fails_if_recipient_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        recipients = [
+            {
+                "header": {
+                    "foo": "bar"
+                }
+            }
+        ]
+        header_obj = {
+            "protected": protected,
+            "recipients": recipients
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.serialize_json,
+            header_obj, b'hello', key
+        )
+
+    def test_serialize_json_fails_if_recipient_contains_unknown_member(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        recipients = [
+            {
+                "foo": "bar"
+            }
+        ]
+        header_obj = {
+            "protected": protected,
+            "recipients": recipients
+        }
+
+        self.assertRaises(
+            InvalidRecipientMemberNameError,
+            jwe.serialize_json,
+            header_obj, b'hello', key
+        )
+
+    def test_deserialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        data["unprotected"] = {
+            "foo": "bar"
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.deserialize_json,
+            data, key
+        )
+
+    def test_deserialize_json_fails_if_recipient_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        data["recipients"][0]["header"] = {
+            "foo": "bar"
+        }
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.deserialize_json,
+            data, key
+        )
+
+    def test_deserialize_json_fails_if_recipient_contains_unknown_member(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        data["recipients"][0]["foo"] = "bar"
+
+        self.assertRaises(
+            InvalidRecipientMemberNameError,
+            jwe.deserialize_json,
+            data, key
+        )
+
+    def test_deserialize_json_fails_if_jwe_message_contains_unknown_member(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        data["foo"] = "bar"
+
+        self.assertRaises(
+            InvalidJweMemberNameError,
+            jwe.deserialize_json,
+            data, key
+        )
+
     def test_ecdh_es_key_agreement_computation(self):
         # https://tools.ietf.org/html/rfc7518#appendix-C
         alice_ephemeral_key = {
@@ -260,13 +460,12 @@ class JWETest(unittest.TestCase):
             "enc": "A128GCM",
             "apu": "QWxpY2U",
             "apv": "Qm9i",
-            "epk":
-                {
-                    "kty": "EC",
-                    "crv": "P-256",
-                    "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
-                    "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps"
-                }
+            "epk": {
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "gI0GAILBdu7T53akrFmMyGcsF3n5dO7MmwNBHKW5SV0",
+                "y": "SLW_xSffzlPWrHEVI30DHM_4egVwt3NQqeUD7nMFpps"
+            }
         }
 
         alg = JsonWebEncryption.ALG_REGISTRY['ECDH-ES']
@@ -671,7 +870,7 @@ class JWETest(unittest.TestCase):
             protected, b'hello', key
         )
 
-    def test_ecdh_es_decryption_fails_if_key_implicitly_matches_to_no_recipient(self):
+    def test_ecdh_es_decryption_fails_if_key_matches_to_no_recipient(self):
         jwe = JsonWebEncryption()
 
         bob_key = OKPKey.import_key({
@@ -721,62 +920,6 @@ class JWETest(unittest.TestCase):
 
         self.assertRaises(
             InvalidUnwrap,
-            jwe.deserialize_json,
-            data, charlie_key
-        )
-
-    def test_ecdh_es_decryption_fails_if_key_explicitly_matches_to_no_recipient(self):
-        jwe = JsonWebEncryption()
-
-        bob_key = OKPKey.import_key({
-            "kty": "OKP",
-            "crv": "X25519",
-            "kid": "bob-key-2",
-            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
-            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
-        })
-        charlie_key = OKPKey.import_key({
-            "kty": "OKP",
-            "crv": "X25519",
-            "kid": "2021-05-06",
-            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
-            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
-        })
-
-        protected = {
-            "alg": "ECDH-ES+A256KW",
-            "enc": "A256GCM",
-            "apu": "QWxpY2U",
-            "apv": "Qm9i"
-        }
-
-        unprotected = {
-            "jku": "https://alice.example.com/keys.jwks"
-        }
-
-        recipients = [
-            {
-                "header": {
-                    "kid": "bob-key-2"
-                }
-            }
-        ]
-
-        jwe_aad = b'Authenticate me too.'
-
-        header_obj = {
-            "protected": protected,
-            "unprotected": unprotected,
-            "recipients": recipients,
-            "aad": jwe_aad
-        }
-
-        payload = b'Three is a magic number.'
-
-        data = jwe.serialize_json(header_obj, payload, bob_key)
-
-        self.assertRaises(
-            KeyMismatchError,
             jwe.deserialize_json,
             data, charlie_key
         )
@@ -1427,7 +1570,8 @@ class JWETest(unittest.TestCase):
                         "kid": "bob-key-2"
                     },
                     "encrypted_key": "pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQ" +
-                                     "eU1cSl55cQ0hGezJu2N9IY0QN"},
+                                     "eU1cSl55cQ0hGezJu2N9IY0QN"
+                },
                 {
                     "header": {
                         "kid": "2021-05-06"
@@ -1853,6 +1997,166 @@ class JWETest(unittest.TestCase):
         self.assertEqual(rv['header']['aad'], jwe_aad)
         self.assertEqual(rv['payload'], payload)
 
+    def test_decryption_with_json_serialization_succeeds_while_encrypted_key_for_another_recipient_is_invalid(self):
+        jwe = JsonWebEncryption()
+
+        alice_key = OKPKey.import_key({
+            "kid": "Alice's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4",
+            "d": "i9KuFhSzEBsiv3PKVL5115OCdsqQai5nj_Flzfkw5jU"
+        })
+        bob_key = OKPKey.import_key({
+            "kid": "Bob's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
+            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
+        })
+        charlie_key = OKPKey.import_key({
+            "kid": "Charlie's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
+            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
+        })
+
+        data = {
+            "protected": "eyJhbGciOiJFQ0RILTFQVStBMTI4S1ciLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYXB1Ijoi" +
+                         "UVd4cFkyVSIsImFwdiI6IlFtOWlJR0Z1WkNCRGFHRnliR2xsIiwiZXBrIjp7Imt0eSI6Ik9L" +
+                         "UCIsImNydiI6IlgyNTUxOSIsIngiOiJrOW9mX2NwQWFqeTBwb1c1Z2FpeFhHczluSGt3ZzFB" +
+                         "RnFVQUZhMzlkeUJjIn19",
+            "unprotected": {
+                "jku": "https://alice.example.com/keys.jwks"
+            },
+            "recipients": [
+                {
+                    "header": {
+                        "kid": "Bob's key"
+                    },
+                    "encrypted_key": "pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQ" +
+                                     "eU1cSl55cQ0hGezJu2N9IY0QM"  # Invalid encrypted key
+                },
+                {
+                    "header": {
+                        "kid": "Charlie's key"
+                    },
+                    "encrypted_key": "56GVudgRLIMEElQ7DpXsijJVRSWUSDNdbWkdV3g0GUNq6hcT_GkxwnxlPIWrTXCqRpVKQC8" +
+                                     "fe4z3PQ2YH2afvjQ28aiCTWFE"  # Valid encrypted key
+                }
+            ],
+            "iv": "AAECAwQFBgcICQoLDA0ODw",
+            "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFYw",
+            "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ"
+        }
+
+        rv_at_charlie = jwe.deserialize_json(data, charlie_key, sender_key=alice_key)
+
+        self.assertEqual(rv_at_charlie.keys(), {'header', 'payload'})
+
+        self.assertEqual(rv_at_charlie['header'].keys(), {'protected', 'unprotected', 'recipients'})
+
+        self.assertEqual(
+            rv_at_charlie['header']['protected'],
+            {
+                "alg": "ECDH-1PU+A128KW",
+                "enc": "A256CBC-HS512",
+                "apu": "QWxpY2U",
+                "apv": "Qm9iIGFuZCBDaGFybGll",
+                "epk": {
+                    "kty": "OKP",
+                    "crv": "X25519",
+                    "x": "k9of_cpAajy0poW5gaixXGs9nHkwg1AFqUAFa39dyBc"
+                }
+            }
+        )
+
+        self.assertEqual(
+            rv_at_charlie['header']['unprotected'],
+            {
+                "jku": "https://alice.example.com/keys.jwks"
+            }
+        )
+
+        self.assertEqual(
+            rv_at_charlie['header']['recipients'],
+            [
+                {
+                    "header": {
+                        "kid": "Bob's key"
+                    }
+                },
+                {
+                    "header": {
+                        "kid": "Charlie's key"
+                    }
+                }
+            ]
+        )
+
+        self.assertEqual(rv_at_charlie['payload'], b'Three is a magic number.')
+
+    def test_decryption_with_json_serialization_fails_if_encrypted_key_for_this_recipient_is_invalid(self):
+        jwe = JsonWebEncryption()
+
+        alice_key = OKPKey.import_key({
+            "kid": "Alice's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4",
+            "d": "i9KuFhSzEBsiv3PKVL5115OCdsqQai5nj_Flzfkw5jU"
+        })
+        bob_key = OKPKey.import_key({
+            "kid": "Bob's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
+            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
+        })
+        charlie_key = OKPKey.import_key({
+            "kid": "Charlie's key",
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
+            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
+        })
+
+        data = {
+            "protected": "eyJhbGciOiJFQ0RILTFQVStBMTI4S1ciLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYXB1Ijoi" +
+                         "UVd4cFkyVSIsImFwdiI6IlFtOWlJR0Z1WkNCRGFHRnliR2xsIiwiZXBrIjp7Imt0eSI6Ik9L" +
+                         "UCIsImNydiI6IlgyNTUxOSIsIngiOiJrOW9mX2NwQWFqeTBwb1c1Z2FpeFhHczluSGt3ZzFB" +
+                         "RnFVQUZhMzlkeUJjIn19",
+            "unprotected": {
+                "jku": "https://alice.example.com/keys.jwks"
+            },
+            "recipients": [
+                {
+                    "header": {
+                        "kid": "Bob's key"
+                    },
+                    "encrypted_key": "pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQ" +
+                                     "eU1cSl55cQ0hGezJu2N9IY0QM"  # Invalid encrypted key
+                },
+                {
+                    "header": {
+                        "kid": "Charlie's key"
+                    },
+                    "encrypted_key": "56GVudgRLIMEElQ7DpXsijJVRSWUSDNdbWkdV3g0GUNq6hcT_GkxwnxlPIWrTXCqRpVKQC8" +
+                                     "fe4z3PQ2YH2afvjQ28aiCTWFE"  # Valid encrypted key
+                }
+            ],
+            "iv": "AAECAwQFBgcICQoLDA0ODw",
+            "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFYw",
+            "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ"
+        }
+
+        self.assertRaises(
+            InvalidUnwrap,
+            jwe.deserialize_json,
+            data, bob_key, sender_key=alice_key
+        )
+
     def test_ecdh_1pu_encryption_fails_json_serialization_multiple_recipients_in_direct_key_agreement_mode(self):
         jwe = JsonWebEncryption()
         alice_key = OKPKey.generate_key('X25519', is_private=True)
@@ -2163,7 +2467,7 @@ class JWETest(unittest.TestCase):
             header_obj, b'hello', [bob_key, charlie_key], sender_key=alice_key
         )
 
-    def test_ecdh_1pu_decryption_fails_if_key_implicitly_matches_to_no_recipient(self):
+    def test_ecdh_1pu_decryption_fails_if_key_matches_to_no_recipient(self):
         jwe = JsonWebEncryption()
 
         alice_key = OKPKey.import_key({
@@ -2219,69 +2523,6 @@ class JWETest(unittest.TestCase):
 
         self.assertRaises(
             InvalidUnwrap,
-            jwe.deserialize_json,
-            data, charlie_key, sender_key=alice_key
-        )
-
-    def test_ecdh_1pu_decryption_fails_if_key_explicitly_matches_to_no_recipient(self):
-        jwe = JsonWebEncryption()
-
-        alice_key = OKPKey.import_key({
-            "kty": "OKP",
-            "crv": "X25519",
-            "kid": "alice-key",
-            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4",
-            "d": "i9KuFhSzEBsiv3PKVL5115OCdsqQai5nj_Flzfkw5jU"
-        })
-        bob_key = OKPKey.import_key({
-            "kty": "OKP",
-            "crv": "X25519",
-            "kid": "bob-key-2",
-            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
-            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
-        })
-        charlie_key = OKPKey.import_key({
-            "kty": "OKP",
-            "crv": "X25519",
-            "kid": "2021-05-06",
-            "x": "q-LsvU772uV_2sPJhfAIq-3vnKNVefNoIlvyvg1hrnE",
-            "d": "Jcv8gklhMjC0b-lsk5onBbppWAx5ncNtbM63Jr9xBQE"
-        })
-
-        protected = {
-            "alg": "ECDH-1PU+A128KW",
-            "enc": "A256CBC-HS512",
-            "apu": "QWxpY2U",
-            "apv": "Qm9i"
-        }
-
-        unprotected = {
-            "jku": "https://alice.example.com/keys.jwks"
-        }
-
-        recipients = [
-            {
-                "header": {
-                    "kid": "bob-key-2"
-                }
-            }
-        ]
-
-        jwe_aad = b'Authenticate me too.'
-
-        header_obj = {
-            "protected": protected,
-            "unprotected": unprotected,
-            "recipients": recipients,
-            "aad": jwe_aad
-        }
-
-        payload = b'Three is a magic number.'
-
-        data = jwe.serialize_json(header_obj, payload, bob_key, sender_key=alice_key)
-
-        self.assertRaises(
-            KeyMismatchError,
             jwe.deserialize_json,
             data, charlie_key, sender_key=alice_key
         )
@@ -2656,6 +2897,50 @@ class JWETest(unittest.TestCase):
             DecodeError,
             JsonWebEncryption.parse_json,
             json_msg
+        )
+
+    def test_decryption_fails_if_ciphertext_is_invalid(self):
+        jwe = JsonWebEncryption()
+
+        alice_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "Knbm_BcdQr7WIoz-uqit9M0wbcfEr6y-9UfIZ8QnBD4",
+            "d": "i9KuFhSzEBsiv3PKVL5115OCdsqQai5nj_Flzfkw5jU"
+        })
+        bob_key = OKPKey.import_key({
+            "kty": "OKP",
+            "crv": "X25519",
+            "x": "BT7aR0ItXfeDAldeeOlXL_wXqp-j5FltT0vRSG16kRw",
+            "d": "1gDirl_r_Y3-qUa3WXHgEXrrEHngWThU3c9zj9A2uBg"
+        })
+
+        data = {
+            "protected": "eyJhbGciOiJFQ0RILTFQVStBMTI4S1ciLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYXB1Ijoi" +
+                         "UVd4cFkyVSIsImFwdiI6IlFtOWlJR0Z1WkNCRGFHRnliR2xsIiwiZXBrIjp7Imt0eSI6Ik9L" +
+                         "UCIsImNydiI6IlgyNTUxOSIsIngiOiJrOW9mX2NwQWFqeTBwb1c1Z2FpeFhHczluSGt3ZzFB" +
+                         "RnFVQUZhMzlkeUJjIn19",
+            "unprotected": {
+                "jku": "https://alice.example.com/keys.jwks"
+            },
+            "recipients": [
+                {
+                    "header": {
+                        "kid": "bob-key-2"
+                    },
+                    "encrypted_key": "pOMVA9_PtoRe7xXW1139NzzN1UhiFoio8lGto9cf0t8PyU-sjNXH8-LIRLycq8CHJQbDwvQ" +
+                                     "eU1cSl55cQ0hGezJu2N9IY0QN"
+                }
+            ],
+            "iv": "AAECAwQFBgcICQoLDA0ODw",
+            "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFY",  # invalid ciphertext
+            "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ"
+        }
+
+        self.assertRaises(
+            Exception,
+            jwe.deserialize_json,
+            data, bob_key, sender_key=alice_key
         )
 
     def test_generic_serialize_deserialize_for_compact_serialization(self):
