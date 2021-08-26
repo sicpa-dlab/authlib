@@ -560,8 +560,6 @@ class JsonWebEncryption(object):
             # Since no explicit match has been found, iterate over all the recipients
             error = None
             for recipient in recipients:
-                if 'kid' in recipient['header'] and kid is not None and recipient['header']['kid'] != kid:
-                    continue
                 header = JWEHeader(protected, unprotected, recipient['header'])
                 try:
                     return unwrap_func(recipient['encrypted_key'], header)
