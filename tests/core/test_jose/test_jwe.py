@@ -5,13 +5,15 @@ from collections import OrderedDict
 
 from cryptography.hazmat.primitives.keywrap import InvalidUnwrap
 
-from authlib.common.encoding import urlsafe_b64encode, json_b64encode, to_bytes, urlsafe_b64decode, json_loads
+from authlib.common.encoding import urlsafe_b64encode, json_b64encode, to_bytes, urlsafe_b64decode, json_loads, \
+    to_unicode
 from authlib.jose import JsonWebEncryption
 from authlib.jose import OctKey, OKPKey
 from authlib.jose import errors, ECKey
 from authlib.jose.errors import InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError, \
     InvalidAlgorithmForMultipleRecipientsMode, DecodeError, InvalidHeaderParameterNameError
 from authlib.jose.rfc7516.models import JWEHeader
+from authlib.jose.util import extract_header
 from tests.util import read_file_path
 
 
@@ -342,6 +344,30 @@ class JWETest(unittest.TestCase):
         data = jwe.serialize_compact(protected, b'hello', key)
         rv = jwe.deserialize_compact(data, key)
         self.assertEqual(rv['payload'], b'hello')
+
+    def test_deserialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted(self):
+        jwe = JsonWebEncryption(private_headers=[])
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        decoded_protected = extract_header(to_bytes(data["protected"]), DecodeError)
+        decoded_protected["foo"] = "bar"
+        data["protected"] = to_unicode(json_b64encode(decoded_protected))
+
+        self.assertRaises(
+            InvalidHeaderParameterNameError,
+            jwe.deserialize_json,
+            data, key
+        )
 
     def test_deserialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
         jwe = JsonWebEncryption(private_headers=[])
