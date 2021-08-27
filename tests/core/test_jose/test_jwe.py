@@ -256,6 +256,20 @@ class JWETest(unittest.TestCase):
             protected, b'hello', key
         )
 
+    def test_serialize_compact_allows_unknown_fields_in_header_while_private_fields_not_restricted(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM",
+            "foo": "bar"
+        }
+
+        data = jwe.serialize_compact(protected, b'hello', key)
+        rv = jwe.deserialize_compact(data, key)
+        self.assertEqual(rv['payload'], b'hello')
+
     def test_serialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted(self):
         jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
@@ -322,6 +336,35 @@ class JWETest(unittest.TestCase):
             jwe.serialize_json,
             header_obj, b'hello', key
         )
+
+    def test_serialize_json_allows_unknown_fields_in_headers_while_private_fields_not_restricted(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM",
+            "foo1": "bar1"
+        }
+        unprotected = {
+            "foo2": "bar2"
+        }
+        recipients = [
+            {
+                "header": {
+                    "foo3": "bar3"
+                }
+            }
+        ]
+        header_obj = {
+            "protected": protected,
+            "unprotected": unprotected,
+            "recipients": recipients
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+        rv = jwe.deserialize_json(data, key)
+        self.assertEqual(rv['payload'], b'hello')
 
     def test_serialize_json_ignores_additional_members_in_recipients_elements(self):
         jwe = JsonWebEncryption()
@@ -416,6 +459,30 @@ class JWETest(unittest.TestCase):
             jwe.deserialize_json,
             data, key
         )
+
+    def test_deserialize_json_allows_unknown_fields_in_headers_while_private_fields_not_restricted(self):
+        jwe = JsonWebEncryption()
+        key = OKPKey.generate_key('X25519', is_private=True)
+
+        protected = {
+            "alg": "ECDH-ES+A128KW",
+            "enc": "A128GCM"
+        }
+        header_obj = {
+            "protected": protected
+        }
+
+        data = jwe.serialize_json(header_obj, b'hello', key)
+
+        data["unprotected"] = {
+            "foo1": "bar1"
+        }
+        data["recipients"][0]["header"] = {
+            "foo2": "bar2"
+        }
+
+        rv = jwe.deserialize_json(data, key)
+        self.assertEqual(rv['payload'], b'hello')
 
     def test_deserialize_json_ignores_additional_members_in_recipients_elements(self):
         jwe = JsonWebEncryption()
