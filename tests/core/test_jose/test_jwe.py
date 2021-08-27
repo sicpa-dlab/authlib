@@ -241,7 +241,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_serialize_compact_fails_if_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -257,7 +257,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_serialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -276,7 +276,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_serialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -298,7 +298,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_serialize_json_fails_if_recipient_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -346,7 +346,7 @@ class JWETest(unittest.TestCase):
         self.assertEqual(rv['payload'], b'hello')
 
     def test_deserialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -370,7 +370,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_deserialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
@@ -394,7 +394,7 @@ class JWETest(unittest.TestCase):
         )
 
     def test_deserialize_json_fails_if_recipient_header_contains_unknown_field_while_private_fields_restricted(self):
-        jwe = JsonWebEncryption(private_headers=[])
+        jwe = JsonWebEncryption(private_headers=set())
         key = OKPKey.generate_key('X25519', is_private=True)
 
         protected = {
