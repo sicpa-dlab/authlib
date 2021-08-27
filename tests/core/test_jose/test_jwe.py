@@ -10,8 +10,7 @@ from authlib.jose import JsonWebEncryption
 from authlib.jose import OctKey, OKPKey
 from authlib.jose import errors, ECKey
 from authlib.jose.errors import InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError, \
-    InvalidAlgorithmForMultipleRecipientsMode, DecodeError, InvalidHeaderParameterNameError, \
-    InvalidRecipientMemberNameError, InvalidJweMemberNameError
+    InvalidAlgorithmForMultipleRecipientsMode, DecodeError, InvalidHeaderParameterNameError
 from authlib.jose.rfc7516.models import JWEHeader
 from tests.util import read_file_path
 
@@ -322,7 +321,7 @@ class JWETest(unittest.TestCase):
             header_obj, b'hello', key
         )
 
-    def test_serialize_json_fails_if_recipient_contains_unknown_member(self):
+    def test_serialize_json_ignores_additional_members_in_recipients_elements(self):
         jwe = JsonWebEncryption()
         key = OKPKey.generate_key('X25519', is_private=True)
 
@@ -340,11 +339,9 @@ class JWETest(unittest.TestCase):
             "recipients": recipients
         }
 
-        self.assertRaises(
-            InvalidRecipientMemberNameError,
-            jwe.serialize_json,
-            header_obj, b'hello', key
-        )
+        data = jwe.serialize_compact(protected, b'hello', key)
+        rv = jwe.deserialize_compact(data, key)
+        self.assertEqual(rv['payload'], b'hello')
 
     def test_deserialize_json_fails_if_unprotected_header_contains_unknown_field_while_private_fields_restricted(self):
         jwe = JsonWebEncryption(private_headers=[])
@@ -394,7 +391,7 @@ class JWETest(unittest.TestCase):
             data, key
         )
 
-    def test_deserialize_json_fails_if_recipient_contains_unknown_member(self):
+    def test_deserialize_json_ignores_additional_members_in_recipients_elements(self):
         jwe = JsonWebEncryption()
         key = OKPKey.generate_key('X25519', is_private=True)
 
@@ -410,13 +407,11 @@ class JWETest(unittest.TestCase):
 
         data["recipients"][0]["foo"] = "bar"
 
-        self.assertRaises(
-            InvalidRecipientMemberNameError,
-            jwe.deserialize_json,
-            data, key
-        )
+        data = jwe.serialize_compact(protected, b'hello', key)
+        rv = jwe.deserialize_compact(data, key)
+        self.assertEqual(rv['payload'], b'hello')
 
-    def test_deserialize_json_fails_if_jwe_message_contains_unknown_member(self):
+    def test_deserialize_json_ignores_additional_members_in_jwe_message(self):
         jwe = JsonWebEncryption()
         key = OKPKey.generate_key('X25519', is_private=True)
 
@@ -432,11 +427,9 @@ class JWETest(unittest.TestCase):
 
         data["foo"] = "bar"
 
-        self.assertRaises(
-            InvalidJweMemberNameError,
-            jwe.deserialize_json,
-            data, key
-        )
+        data = jwe.serialize_compact(protected, b'hello', key)
+        rv = jwe.deserialize_compact(data, key)
+        self.assertEqual(rv['payload'], b'hello')
 
     def test_ecdh_es_key_agreement_computation(self):
         # https://tools.ietf.org/html/rfc7518#appendix-C

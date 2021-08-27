@@ -34,24 +34,6 @@ class InvalidHeaderParameterNameError(JoseError):
             description=description)
 
 
-class InvalidJweMemberNameError(JoseError):
-    error = 'invalid_jwe_member_name_error'
-
-    def __init__(self, name):
-        description = 'Invalid JWE Member Name: {}'.format(name)
-        super(InvalidJweMemberNameError, self).__init__(
-            description=description)
-
-
-class InvalidRecipientMemberNameError(JoseError):
-    error = 'invalid_recipient_member_name_error'
-
-    def __init__(self, name):
-        description = 'Invalid Recipient Member Name: {}'.format(name)
-        super(InvalidRecipientMemberNameError, self).__init__(
-            description=description)
-
-
 class InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError(JoseError):
     error = 'invalid_encryption_algorithm_for_ECDH_1PU_with_key_wrapping'
 
